@@ -1,0 +1,3 @@
+[submodule "obfuscator/shadowsocks/src/main/rust/shadowsocks-rust"]
+	path = obfuscator/shadowsocks/src/main/rust/shadowsocks-rust
+	url = git@github.com:shadowsocks/shadowsocks-rust.git
