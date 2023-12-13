@@ -42,4 +42,5 @@ android {
 }
 
 dependencies {
+    implementation(project(":obfuscator:shadowsocks"))
 }
