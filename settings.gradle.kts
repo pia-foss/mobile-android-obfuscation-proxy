@@ -17,5 +17,3 @@ dependencyResolutionManagement {
 
 include(":testapp")
 include(":obfuscator")
-include(":obfuscator:shadowsocks")
- 

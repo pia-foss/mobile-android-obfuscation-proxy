@@ -1,7 +1,5 @@
-package com.kape.obfuscator.presenter
-
 /*
- *  Copyright (c) 2023 Private Internet Access, Inc.
+ * Copyright (c) "2023" Private Internet Access, Inc.
  *
  *  This file is part of the Private Internet Access Android Client.
  *
@@ -16,7 +14,10 @@ package com.kape.obfuscator.presenter
  *
  *  You should have received a copy of the GNU General Public License along with the Private
  *  Internet Access Android Client.  If not, see <https://www.gnu.org/licenses/>.
+ *
  */
+
+package com.kape.obfuscator.presenter
 
 /**
  * Interface defining the API available to the clients.
@@ -24,14 +25,19 @@ package com.kape.obfuscator.presenter
 public interface ObfuscatorAPI {
 
     /**
-     * Starts the shadowsocks process running `sslocal` on the port being sent back with the result.
-     *
-     * @param callback `ObfuscatorResultCallback<Int>`.
+     * @param commandLineParams `List<String>`. String representation of the parameters to be used
+     * when starting the process. e.g. `-s 1.1.1.1 -p 8080`
+     * @param obfuscatorProcessEventHandler `ShadowsocksProcessEventHandler`
+     * @param callback `ShadowsocksCallback`.
      */
-    fun start(callback: ObfuscatorResultCallback<Int>)
+    fun start(
+        commandLineParams: List<String>,
+        obfuscatorProcessEventHandler: ObfuscatorProcessEventHandler,
+        callback: ObfuscatorCallback
+    )
 
     /**
-     * @param callback `ObfuscatorCallback`.
+     * @param callback `ShadowsocksCallback`.
      */
     fun stop(callback: ObfuscatorCallback)
 }
@@ -40,8 +46,3 @@ public interface ObfuscatorAPI {
  * It defines the callback structure for an API method without a response object.
  */
 public typealias ObfuscatorCallback = (Result<Unit>) -> Unit
-
-/**
- * It defines the callback structure for an API method requiring an object in its response.
- */
-public typealias ObfuscatorResultCallback<T> = (Result<T>) -> Unit
