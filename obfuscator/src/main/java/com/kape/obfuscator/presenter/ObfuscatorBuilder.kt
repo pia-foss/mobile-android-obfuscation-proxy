@@ -1,9 +1,5 @@
-package com.kape.obfuscator.presenter
-
-import android.content.Context
-
 /*
- *  Copyright (c) 2023 Private Internet Access, Inc.
+ * Copyright (c) "2023" Private Internet Access, Inc.
  *
  *  This file is part of the Private Internet Access Android Client.
  *
@@ -18,13 +14,53 @@ import android.content.Context
  *
  *  You should have received a copy of the GNU General Public License along with the Private
  *  Internet Access Android Client.  If not, see <https://www.gnu.org/licenses/>.
+ *
  */
 
+package com.kape.obfuscator.presenter
+
+import android.content.Context
+import com.kape.obfuscator.data.externals.Cache
+import com.kape.obfuscator.data.externals.CacheImpl
+import com.kape.obfuscator.data.externals.CoroutineContext
+import com.kape.obfuscator.data.externals.CoroutineContextImpl
+import com.kape.obfuscator.data.externals.FilePath
+import com.kape.obfuscator.data.externals.FilePathImpl
+import com.kape.obfuscator.data.externals.ShadowsocksProcess
+import com.kape.obfuscator.data.externals.ShadowsocksProcessImpl
+import com.kape.obfuscator.domain.controllers.StartProcessController
+import com.kape.obfuscator.domain.controllers.StartProcessControllerImpl
+import com.kape.obfuscator.domain.controllers.StopProcessController
+import com.kape.obfuscator.domain.controllers.StopProcessControllerImpl
+import com.kape.obfuscator.domain.usecases.ClearCache
+import com.kape.obfuscator.domain.usecases.ClearCacheImpl
+import com.kape.obfuscator.domain.usecases.CreateProcessListeningOnDeferrable
+import com.kape.obfuscator.domain.usecases.CreateProcessListeningOnDeferrableImpl
+import com.kape.obfuscator.domain.usecases.HandleProcessErrorOutput
+import com.kape.obfuscator.domain.usecases.HandleProcessErrorOutputImpl
+import com.kape.obfuscator.domain.usecases.HandleProcessSuccessOutput
+import com.kape.obfuscator.domain.usecases.HandleProcessSuccessOutputImpl
+import com.kape.obfuscator.domain.usecases.IsProcessRunning
+import com.kape.obfuscator.domain.usecases.IsProcessRunningImpl
+import com.kape.obfuscator.domain.usecases.IsProcessStopped
+import com.kape.obfuscator.domain.usecases.IsProcessStoppedImpl
+import com.kape.obfuscator.domain.usecases.ProcessOutputHandler
+import com.kape.obfuscator.domain.usecases.StartProcess
+import com.kape.obfuscator.domain.usecases.StartProcessImpl
+import com.kape.obfuscator.domain.usecases.StartProcessOutputHandler
+import com.kape.obfuscator.domain.usecases.StartProcessOutputHandlerImpl
+import com.kape.obfuscator.domain.usecases.StartProcessOutputReader
+import com.kape.obfuscator.domain.usecases.StartProcessOutputReaderImpl
+import com.kape.obfuscator.domain.usecases.StopProcess
+import com.kape.obfuscator.domain.usecases.StopProcessImpl
+import com.kape.obfuscator.domain.usecases.WaitForProcessListeningOnDeferrable
+import com.kape.obfuscator.domain.usecases.WaitForProcessListeningOnDeferrableImpl
+
 /**
- * Builder class responsible for creating an instance of an object conforming to the `ObfuscatorAPI`
+ * Builder class responsible for creating an instance of an object conforming to the `ShadowsocksAPI`
  * interface.
  */
-public class ObfuscatorBuilder {
+class ObfuscatorBuilder {
     private var context: Context? = null
     private var clientCoroutineContext: kotlin.coroutines.CoroutineContext? = null
 
@@ -49,7 +85,7 @@ public class ObfuscatorBuilder {
     }
 
     /**
-     * @return `ObfuscatorAPI`.
+     * @return `ShadowsocksAPI`.
      */
     fun build(): ObfuscatorAPI {
         val context = this.context
@@ -68,7 +104,127 @@ public class ObfuscatorBuilder {
         context: Context,
         clientCoroutineContext: kotlin.coroutines.CoroutineContext
     ): ObfuscatorAPI {
-        return Obfuscator()
+        return initializeExternals(
+            context = context,
+            clientCoroutineContext = clientCoroutineContext
+        )
+    }
+
+    private fun initializeExternals(
+        context: Context,
+        clientCoroutineContext: kotlin.coroutines.CoroutineContext
+    ): ObfuscatorAPI {
+        val cache: Cache = CacheImpl()
+        val coroutineContext: CoroutineContext = CoroutineContextImpl(
+            clientCoroutineContext = clientCoroutineContext
+        )
+        val filePath: FilePath = FilePathImpl(
+            context = context
+        )
+        val shadowsocksProcess: ShadowsocksProcess = ShadowsocksProcessImpl(
+            filePath = filePath
+        )
+        return initializeUseCases(
+            cache = cache,
+            shadowsocksProcess = shadowsocksProcess,
+            coroutineContext = coroutineContext
+        )
+    }
+
+    private fun initializeUseCases(
+        cache: Cache,
+        shadowsocksProcess: ShadowsocksProcess,
+        coroutineContext: CoroutineContext
+    ): ObfuscatorAPI {
+        val clearCache: ClearCache = ClearCacheImpl(
+            cache = cache
+        )
+        val isProcessRunning: IsProcessRunning = IsProcessRunningImpl(
+            cache = cache
+        )
+        val isProcessStopped: IsProcessStopped = IsProcessStoppedImpl(
+            cache = cache
+        )
+        val createProcessListeningOnDeferrable: CreateProcessListeningOnDeferrable =
+            CreateProcessListeningOnDeferrableImpl(
+                cache = cache
+            )
+        val handleProcessErrorOutput: HandleProcessErrorOutput = HandleProcessErrorOutputImpl()
+        val handleProcessSuccessOutput: HandleProcessSuccessOutput = HandleProcessSuccessOutputImpl(
+            cache = cache
+        )
+        val startProcessOutputHandler: StartProcessOutputHandler = StartProcessOutputHandlerImpl(
+            handleProcessErrorOutput = handleProcessErrorOutput,
+            handleProcessSuccessOutput = handleProcessSuccessOutput
+        )
+        val processOutputHandler: ProcessOutputHandler = StartProcessOutputHandlerImpl(
+            handleProcessErrorOutput = handleProcessErrorOutput,
+            handleProcessSuccessOutput = handleProcessSuccessOutput
+        )
+        val startProcess: StartProcess = StartProcessImpl(
+            cache = cache,
+            shadowsocksProcess = shadowsocksProcess
+        )
+        val startProcessOutputReader: StartProcessOutputReader = StartProcessOutputReaderImpl(
+            cache = cache,
+            coroutineContext = coroutineContext
+        )
+        val stopProcess: StopProcess = StopProcessImpl(
+            cache = cache,
+            shadowsocksProcess = shadowsocksProcess
+        )
+        val waitForProcessListeningOnDeferrable: WaitForProcessListeningOnDeferrable =
+            WaitForProcessListeningOnDeferrableImpl(
+                cache = cache
+            )
+        return initializeControllers(
+            coroutineContext = coroutineContext,
+            clearCache = clearCache,
+            isProcessRunning = isProcessRunning,
+            isProcessStopped = isProcessStopped,
+            createProcessListeningOnDeferrable = createProcessListeningOnDeferrable,
+            startProcessOutputHandler = startProcessOutputHandler,
+            processOutputHandler = processOutputHandler,
+            startProcess = startProcess,
+            startProcessOutputReader = startProcessOutputReader,
+            stopProcess = stopProcess,
+            waitForProcessListeningOnDeferrable = waitForProcessListeningOnDeferrable
+        )
+    }
+
+    private fun initializeControllers(
+        coroutineContext: CoroutineContext,
+        clearCache: ClearCache,
+        isProcessRunning: IsProcessRunning,
+        isProcessStopped: IsProcessStopped,
+        createProcessListeningOnDeferrable: CreateProcessListeningOnDeferrable,
+        startProcessOutputHandler: StartProcessOutputHandler,
+        processOutputHandler: ProcessOutputHandler,
+        startProcess: StartProcess,
+        startProcessOutputReader: StartProcessOutputReader,
+        stopProcess: StopProcess,
+        waitForProcessListeningOnDeferrable: WaitForProcessListeningOnDeferrable
+    ): ObfuscatorAPI {
+        val startProcessController: StartProcessController = StartProcessControllerImpl(
+            isProcessStopped = isProcessStopped,
+            createProcessListeningOnDeferrable = createProcessListeningOnDeferrable,
+            processOutputHandler = processOutputHandler,
+            startProcessOutputHandler = startProcessOutputHandler,
+            startProcess = startProcess,
+            startProcessOutputReader = startProcessOutputReader,
+            waitForProcessListeningOnDeferrable = waitForProcessListeningOnDeferrable,
+            clearCache = clearCache
+        )
+        val stopProcessController: StopProcessController = StopProcessControllerImpl(
+            isProcessRunning = isProcessRunning,
+            stopProcess = stopProcess,
+            clearCache = clearCache
+        )
+        return Obfuscator(
+            startProcessController = startProcessController,
+            stopProcessController = stopProcessController,
+            coroutineContext = coroutineContext
+        )
     }
     // endregion
 }

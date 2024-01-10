@@ -1,7 +1,5 @@
-package com.kape.obfuscator.presenter
-
 /*
- *  Copyright (c) 2023 Private Internet Access, Inc.
+ * Copyright (c) "2023" Private Internet Access, Inc.
  *
  *  This file is part of the Private Internet Access Android Client.
  *
@@ -16,17 +14,52 @@ package com.kape.obfuscator.presenter
  *
  *  You should have received a copy of the GNU General Public License along with the Private
  *  Internet Access Android Client.  If not, see <https://www.gnu.org/licenses/>.
+ *
  */
 
-internal class Obfuscator : ObfuscatorAPI {
+package com.kape.obfuscator.presenter
 
-    // region ObfuscatorAPI
-    override fun start(callback: ObfuscatorResultCallback<Int>) {
-        TODO("Not yet implemented")
+import com.kape.obfuscator.data.externals.CoroutineContext
+import com.kape.obfuscator.domain.controllers.StartProcessController
+import com.kape.obfuscator.domain.controllers.StopProcessController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+
+internal class Obfuscator(
+    private val startProcessController: StartProcessController,
+    private val stopProcessController: StopProcessController,
+    private val coroutineContext: CoroutineContext
+) : ObfuscatorAPI {
+
+    private val moduleCoroutineContext: kotlin.coroutines.CoroutineContext =
+        coroutineContext.getModuleCoroutineContext().getOrThrow()
+    private val clientCoroutineContext: kotlin.coroutines.CoroutineContext =
+        coroutineContext.getClientCoroutineContext().getOrThrow()
+
+    // region ShadowsocksAPI
+    override fun start(
+        commandLineParams: List<String>,
+        obfuscatorProcessEventHandler: ObfuscatorProcessEventHandler,
+        callback: ObfuscatorCallback
+    ) {
+        CoroutineScope(moduleCoroutineContext).launch {
+            val result = startProcessController(
+                commandLineParams = commandLineParams,
+                obfuscatorProcessEventHandler = obfuscatorProcessEventHandler
+            )
+            launch(clientCoroutineContext) {
+                callback(result)
+            }
+        }
     }
 
     override fun stop(callback: ObfuscatorCallback) {
-        TODO("Not yet implemented")
+        CoroutineScope(moduleCoroutineContext).launch {
+            val result = stopProcessController()
+            launch(clientCoroutineContext) {
+                callback(result)
+            }
+        }
     }
     // endregion
 }
