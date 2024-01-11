@@ -3,21 +3,7 @@ import org.gradle.kotlin.dsl.support.listFilesOrdered
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("org.jlleitschuh.gradle.ktlint")
     id("org.mozilla.rust-android-gradle.rust-android")
-    id("maven-publish")
-}
-
-publishing {
-    repositories {
-        maven {
-            url = uri("https://maven.pkg.github.com/pia-foss/mobile-android-obfuscation-proxy/")
-            credentials {
-                username = System.getenv("GITHUB_USERNAME")
-                password = System.getenv("GITHUB_TOKEN")
-            }
-        }
-    }
 }
 
 android {
