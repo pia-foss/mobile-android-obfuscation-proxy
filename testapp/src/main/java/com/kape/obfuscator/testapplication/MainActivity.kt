@@ -21,10 +21,10 @@ package com.kape.obfuscator.testapplication
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import com.kape.obfuscator.testapp.databinding.ActivityMainBinding
 import com.kape.obfuscator.presenter.ObfuscatorAPI
 import com.kape.obfuscator.presenter.ObfuscatorBuilder
 import com.kape.obfuscator.presenter.ObfuscatorProcessEventHandler
+import com.kape.obfuscator.testapp.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
 
 class MainActivity : AppCompatActivity(), ObfuscatorProcessEventHandler {
@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity(), ObfuscatorProcessEventHandler {
                     "-s", "154.47.20.240:443",
                     "-k", "shadowsocks",
                     "-b", "127.0.0.1:8383",
-                    "-m", "aes-128-gcm",
+                    "-m", "aes-128-gcm"
                 ),
                 obfuscatorProcessEventHandler = this
             ) {
