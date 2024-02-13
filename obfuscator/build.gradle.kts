@@ -52,7 +52,9 @@ cargo {
                 "logging",
                 "local-dns",
                 "local-tun",
-                "aead-cipher-2022"
+                "stream-cipher",
+                "aead-cipher-2022",
+                "aead-cipher-extra"
             )
         )
     }

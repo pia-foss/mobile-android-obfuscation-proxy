@@ -8,7 +8,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.kape.testapp"
+        applicationId = "com.kape.obfuscator.testapp"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
