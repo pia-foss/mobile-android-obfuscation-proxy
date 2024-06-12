@@ -50,6 +50,7 @@ cargo {
     features {
         noDefaultBut(
             arrayOf(
+                "local-tunnel",
                 "logging",
                 "local-dns",
                 "local-tun",
