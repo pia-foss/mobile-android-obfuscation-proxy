@@ -4,17 +4,16 @@ plugins {
     id("org.jetbrains.kotlin.android") version "1.9.10" apply false
     id("org.jlleitschuh.gradle.ktlint") version "11.5.1" apply true
     id("org.mozilla.rust-android-gradle.rust-android") version "0.9.3" apply false
-    id("maven-publish") apply true
 }
 
 allprojects {
     group = "com.kape.android"
     version = "0.0.3"
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
-    apply(plugin = "maven-publish")
 }
 
 subprojects {
+    apply(plugin = "maven-publish")
     project.afterEvaluate {
         if (!plugins.hasPlugin("android")) {
             publishing {

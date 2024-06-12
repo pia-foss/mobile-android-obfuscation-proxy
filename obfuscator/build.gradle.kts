@@ -4,7 +4,6 @@ plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
     id("org.mozilla.rust-android-gradle.rust-android")
-    id("maven-publish")
 }
 
 android {
