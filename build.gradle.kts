@@ -30,11 +30,8 @@ subprojects {
                         }
                         repositories {
                             maven {
-                                url = uri("https://maven.pkg.github.com/pia-foss/mobile-android-obfuscation-proxy/")
-                                credentials {
-                                    username = System.getenv("GITHUB_USERNAME")
-                                    password = System.getenv("GITHUB_TOKEN")
-                                }
+                                url =
+                                    uri("https://maven.pkg.github.com/pia-foss/mobile-android-obfuscation-proxy/")
                             }
                         }
                     }
