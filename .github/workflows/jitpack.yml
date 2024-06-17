@@ -1,0 +1,3 @@
+before_install:
+  ./jitpack.sh
+
