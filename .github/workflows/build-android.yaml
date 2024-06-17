@@ -19,7 +19,7 @@ jobs:
       - uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
-          ndk-version: r27 RC 1
+          ndk-version: r26d
           link-to-sdk: true
       - run: ./gradlew build
       - name: prepare rust targets

@@ -1,7 +1,7 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 plugins {
     id("com.android.library") version "8.5.0" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.10" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.23" apply false
     id("org.jlleitschuh.gradle.ktlint") version "11.5.1" apply true
     id("org.mozilla.rust-android-gradle.rust-android") version "0.9.3" apply false
     id("maven-publish") apply true
@@ -9,7 +9,7 @@ plugins {
 
 allprojects {
     group = "com.kape.android"
-    version = "0.0.4.3"
+    version = "0.0.4.4"
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
     apply(plugin = "maven-publish")
 }

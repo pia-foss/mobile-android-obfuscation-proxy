@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.kape.obfuscator"
-    ndkVersion = "27.0.11902837"
+    ndkVersion = "26.3.11579264"
 
     compileSdk = 34
     defaultConfig {
