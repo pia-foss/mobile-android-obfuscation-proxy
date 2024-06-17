@@ -9,7 +9,6 @@ plugins {
 
 android {
     namespace = "com.kape.obfuscator"
-    ndkVersion = sdkDirectory.resolve("ndk").listFilesOrdered().last().name
 
     compileSdk = 34
     defaultConfig {
@@ -39,6 +38,7 @@ android {
             useLegacyPackaging = true
         }
     }
+    ndkVersion = sdkDirectory.resolve("ndk").listFilesOrdered().last().name
 }
 
 cargo {
