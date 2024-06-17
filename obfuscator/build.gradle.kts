@@ -1,4 +1,3 @@
-import org.gradle.kotlin.dsl.support.listFilesOrdered
 
 plugins {
     id("com.android.library")
@@ -9,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.kape.obfuscator"
-    ndkVersion = sdkDirectory.resolve("ndk").listFilesOrdered().last().name
+    ndkVersion = "27.0.11902837"
 
     compileSdk = 34
     defaultConfig {
