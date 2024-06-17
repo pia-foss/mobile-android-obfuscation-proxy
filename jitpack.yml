@@ -1,0 +1,2 @@
+before_install:
+  - yes | sdkmanager --uninstall "ndk-bundle" | sdkmanager --install "ndk;26.3.11579264"
