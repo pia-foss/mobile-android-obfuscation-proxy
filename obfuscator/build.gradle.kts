@@ -1,4 +1,3 @@
-import org.gradle.kotlin.dsl.support.listFilesOrdered
 
 plugins {
     id("com.android.library")
@@ -9,6 +8,7 @@ plugins {
 
 android {
     namespace = "com.kape.obfuscator"
+    ndkVersion = "26.3.11579264"
 
     compileSdk = 34
     defaultConfig {
@@ -38,7 +38,6 @@ android {
             useLegacyPackaging = true
         }
     }
-    ndkVersion = sdkDirectory.resolve("ndk").listFilesOrdered().last().name
 }
 
 cargo {

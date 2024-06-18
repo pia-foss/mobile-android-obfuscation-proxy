@@ -15,13 +15,6 @@ jobs:
           distribution: temurin
           java-version: 17
           cache: gradle
-      - uses: actions/checkout@v3
-      - uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r26d
-          link-to-sdk: true
-          local-cache: true
       - name: prepare rust targets
         run: rustup target add armv7-linux-androideabi aarch64-linux-android i686-linux-android x86_64-linux-android
       - name: build debug
