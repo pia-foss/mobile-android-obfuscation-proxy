@@ -9,7 +9,7 @@ plugins {
 
 allprojects {
     group = "com.kape.android"
-    version = "0.0.4.4.8"
+    version = "0.0.4.4.9"
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
     apply(plugin = "maven-publish")
 }
