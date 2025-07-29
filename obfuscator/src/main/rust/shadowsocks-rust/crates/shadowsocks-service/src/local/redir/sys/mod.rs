@@ -6,11 +6,13 @@ use socket2::Socket;
 cfg_if! {
     if #[cfg(unix)] {
         mod unix;
+        #[allow(unused_imports)]
         pub use self::unix::*;
     }
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 pub fn set_ipv6_only<S>(socket: &S, ipv6_only: bool) -> io::Result<()>
 where
     S: std::os::unix::io::AsRawFd,
@@ -20,7 +22,7 @@ where
     let fd = socket.as_raw_fd();
     let sock = unsafe { Socket::from_raw_fd(fd) };
     let result = sock.set_only_v6(ipv6_only);
-    sock.into_raw_fd();
+    let _ = sock.into_raw_fd();
     result
 }
 
@@ -35,6 +37,6 @@ where
     let handle = socket.as_raw_socket();
     let sock = unsafe { Socket::from_raw_socket(handle) };
     let result = sock.set_only_v6(ipv6_only);
-    sock.into_raw_socket();
+    let _ = sock.into_raw_socket();
     result
 }

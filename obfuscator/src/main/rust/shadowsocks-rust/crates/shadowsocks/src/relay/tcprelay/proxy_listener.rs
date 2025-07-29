@@ -17,6 +17,7 @@ use crate::{
 };
 
 /// A TCP listener for accepting shadowsocks' client connection
+#[derive(Debug)]
 pub struct ProxyListener {
     listener: TcpListener,
     method: CipherKind,
@@ -78,7 +79,7 @@ impl ProxyListener {
         let stream = map_fn(stream);
 
         // Create a ProxyServerStream and read the target address from it
-        let stream = ProxyServerStream::from_stream(
+        let stream = ProxyServerStream::from_stream_with_user_manager(
             self.context.clone(),
             stream,
             self.method,

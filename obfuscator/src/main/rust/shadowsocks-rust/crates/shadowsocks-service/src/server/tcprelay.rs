@@ -10,11 +10,10 @@ use std::{
 
 use log::{debug, error, info, trace, warn};
 use shadowsocks::{
+    ProxyListener, ServerConfig,
     crypto::CipherKind,
     net::{AcceptOpts, TcpStream as OutboundTcpStream},
-    relay::tcprelay::{utils::copy_encrypted_bidirectional, ProxyServerStream},
-    ProxyListener,
-    ServerConfig,
+    relay::tcprelay::{ProxyServerStream, utils::copy_encrypted_bidirectional},
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -22,7 +21,7 @@ use tokio::{
     time,
 };
 
-use crate::net::{utils::ignore_until_end, MonProxyStream};
+use crate::net::{MonProxyStream, utils::ignore_until_end};
 
 use super::context::ServiceContext;
 
@@ -180,8 +179,7 @@ impl TcpServerClient {
 
                 trace!(
                     "tcp silent-drop peer: {} is now closing with result {:?}",
-                    self.peer_addr,
-                    res
+                    self.peer_addr, res
                 );
 
                 return Ok(());
@@ -190,8 +188,7 @@ impl TcpServerClient {
 
         trace!(
             "accepted tcp client connection {}, establishing tunnel to {}",
-            self.peer_addr,
-            target_addr
+            self.peer_addr, target_addr
         );
 
         if self.context.check_outbound_blocked(&target_addr).await {
@@ -245,8 +242,7 @@ impl TcpServerClient {
 
                     trace!(
                         "tcp tunnel {} -> {} sent TFO connect without data",
-                        self.peer_addr,
-                        target_addr
+                        self.peer_addr, target_addr
                     );
                 }
             }
@@ -263,18 +259,13 @@ impl TcpServerClient {
             Ok((rn, wn)) => {
                 trace!(
                     "tcp tunnel {} <-> {} closed, L2R {} bytes, R2L {} bytes",
-                    self.peer_addr,
-                    target_addr,
-                    rn,
-                    wn
+                    self.peer_addr, target_addr, rn, wn
                 );
             }
             Err(err) => {
                 trace!(
                     "tcp tunnel {} <-> {} closed with error: {}",
-                    self.peer_addr,
-                    target_addr,
-                    err
+                    self.peer_addr, target_addr, err
                 );
             }
         }

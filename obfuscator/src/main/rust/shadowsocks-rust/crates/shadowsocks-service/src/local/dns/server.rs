@@ -15,15 +15,14 @@ use std::{
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
 use futures::{
-    future::{self, Either},
     FutureExt,
+    future::{self, Either},
 };
 use hickory_resolver::proto::{
-    op::{header::MessageType, response_code::ResponseCode, Message, OpCode, Query},
+    op::{Message, OpCode, Query, header::MessageType, response_code::ResponseCode},
     rr::{DNSClass, Name, RData, RecordType},
 };
 use log::{debug, error, info, trace, warn};
-use rand::{thread_rng, Rng};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, UdpSocket},
@@ -31,10 +30,10 @@ use tokio::{
 };
 
 use shadowsocks::{
+    ServerAddr,
     config::Mode,
     net::TcpListener,
-    relay::{udprelay::MAXIMUM_UDP_PAYLOAD_SIZE, Address},
-    ServerAddr,
+    relay::{Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
 };
 
 use crate::{
@@ -212,15 +211,17 @@ impl DnsTcpServerBuilder {
     async fn build(self) -> io::Result<DnsTcpServer> {
         cfg_if::cfg_if! {
             if #[cfg(target_os = "macos")] {
-                let listener = if let Some(launchd_socket_name) = self.launchd_socket_name {
-                    use tokio::net::TcpListener as TokioTcpListener;
-                    use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
+                let listener = match self.launchd_socket_name {
+                    Some(launchd_socket_name) => {
+                        use tokio::net::TcpListener as TokioTcpListener;
+                        use crate::net::launch_activate_socket::get_launch_activate_tcp_listener;
 
-                    let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name)?;
-                    let tokio_listener = TokioTcpListener::from_std(std_listener)?;
-                    TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
-                } else {
-                    create_standard_tcp_listener(&self.context, &self.bind_addr).await?
+                        let std_listener = get_launch_activate_tcp_listener(&launchd_socket_name, true)?;
+                        let tokio_listener = TokioTcpListener::from_std(std_listener)?;
+                        TcpListener::from_listener(tokio_listener, self.context.accept_opts())?
+                    } _ => {
+                        create_standard_tcp_listener(&self.context, &self.bind_addr).await?
+                    }
                 };
             } else {
                 let listener = create_standard_tcp_listener(&self.context, &self.bind_addr).await?;
@@ -385,15 +386,15 @@ impl DnsUdpServerBuilder {
     async fn build(self) -> io::Result<DnsUdpServer> {
         cfg_if::cfg_if! {
             if #[cfg(target_os = "macos")] {
-                let socket = if let Some(launchd_socket_name) = self.launchd_socket_name {
+                let socket = match self.launchd_socket_name { Some(launchd_socket_name) => {
                     use tokio::net::UdpSocket as TokioUdpSocket;
                     use crate::net::launch_activate_socket::get_launch_activate_udp_socket;
 
-                    let std_socket = get_launch_activate_udp_socket(&launchd_socket_name)?;
+                    let std_socket = get_launch_activate_udp_socket(&launchd_socket_name, true)?;
                     TokioUdpSocket::from_std(std_socket)?
-                } else {
+                } _ => {
                     create_standard_udp_listener(&self.context, &self.bind_addr).await?.into()
-                };
+                }};
             } else {
                 let socket = create_standard_udp_listener(&self.context, &self.bind_addr).await?.into();
             }
@@ -590,13 +591,19 @@ fn should_forward_by_query(context: &ServiceContext, balancer: &PingBalancer, qu
     // https://github.com/shadowsocks/shadowsocks-android/issues/2722
     for server in balancer.servers() {
         let svr_cfg = server.server_config();
-        if let ServerAddr::DomainName(ref dn, ..) = svr_cfg.addr() {
+        if let ServerAddr::DomainName(dn, ..) = svr_cfg.addr() {
             // Convert domain name to `Name`
             // Ignore it if error occurs
-            if let Ok(name) = Name::from_str(dn) {
+            if let Ok(mut name) = Name::from_str(dn) {
                 // cmp will handle FQDN in case insensitive way
                 if let Ordering::Equal = query.name().cmp(&name) {
                     // It seems that query is for this server, just bypass it to local resolver
+                    trace!("DNS querying name {} of server {:?}", query.name(), svr_cfg);
+                    return Some(false);
+                }
+                // test it again with fqdn set
+                name.set_fqdn(true);
+                if let Ordering::Equal = query.name().cmp(&name) {
                     trace!("DNS querying name {} of server {:?}", query.name(), svr_cfg);
                     return Some(false);
                 }
@@ -630,11 +637,11 @@ fn should_forward_by_response(
     query: &Query,
 ) -> bool {
     if let Some(acl) = acl {
-        if let Ok(ref local_response) = local_response {
+        if let Ok(local_response) = local_response {
             let mut names = HashSet::new();
             names.insert(query.name());
             macro_rules! examine_name {
-                ($name:expr, $is_answer:expr) => {{
+                ($name:expr_2021, $is_answer:expr_2021) => {{
                     names.insert($name);
                     if $is_answer {
                         if let Some(value) = check_name_in_proxy_list(acl, $name) {
@@ -648,8 +655,8 @@ fn should_forward_by_response(
                 }};
             }
             macro_rules! examine_record {
-                ($rec:ident, $is_answer:expr) => {
-                    if let Some(RData::CNAME(name)) = $rec.data() {
+                ($rec:ident, $is_answer:expr_2021) => {
+                    if let RData::CNAME(name) = $rec.data() {
                         if $is_answer {
                             if let Some(value) = check_name_in_proxy_list(acl, name) {
                                 return value;
@@ -667,13 +674,13 @@ fn should_forward_by_response(
                         return true;
                     }
                     let forward = match $rec.data() {
-                        Some(RData::A(ip)) => acl.check_ip_in_proxy_list(&IpAddr::V4((*ip).into())),
-                        Some(RData::AAAA(ip)) => acl.check_ip_in_proxy_list(&IpAddr::V6((*ip).into())),
+                        RData::A(ip) => acl.check_ip_in_proxy_list(&IpAddr::V4((*ip).into())),
+                        RData::AAAA(ip) => acl.check_ip_in_proxy_list(&IpAddr::V6((*ip).into())),
                         // MX records cause type A additional section processing for the host specified by EXCHANGE.
-                        Some(RData::MX(mx)) => examine_name!(mx.exchange(), $is_answer),
+                        RData::MX(mx) => examine_name!(mx.exchange(), $is_answer),
                         // NS records cause both the usual additional section processing to locate a type A record...
-                        Some(RData::NS(name)) => examine_name!(name, $is_answer),
-                        Some(RData::PTR(_)) => unreachable!(),
+                        RData::NS(name) => examine_name!(name, $is_answer),
+                        RData::PTR(_) => unreachable!(),
                         _ => acl.is_default_in_proxy_list(),
                     };
                     if !forward {
@@ -752,12 +759,12 @@ impl DnsClient {
                 for rec in result.answers() {
                     trace!("dns answer: {:?}", rec);
                     match rec.data() {
-                        Some(RData::A(ip)) => {
+                        RData::A(ip) => {
                             self.context
                                 .add_to_reverse_lookup_cache(Ipv4Addr::from(*ip).into(), forward)
                                 .await
                         }
-                        Some(RData::AAAA(ip)) => {
+                        RData::AAAA(ip) => {
                             self.context
                                 .add_to_reverse_lookup_cache(Ipv6Addr::from(*ip).into(), forward)
                                 .await
@@ -854,7 +861,7 @@ impl DnsClient {
 
     async fn lookup_remote_inner(&self, query: &Query, remote_addr: &Address) -> io::Result<Message> {
         let mut message = Message::new();
-        message.set_id(thread_rng().gen());
+        message.set_id(rand::random());
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 
@@ -884,7 +891,7 @@ impl DnsClient {
                     // Then this future will be disabled and have no effect
                     //
                     // Randomly choose from 500ms ~ 1.5s for preventing obvious request pattern
-                    let sleep_time = thread_rng().gen_range(500..=1500);
+                    let sleep_time = rand::random_range(500..=1500);
                     time::sleep(Duration::from_millis(sleep_time)).await;
 
                     let server = self.balancer.best_tcp_server();
@@ -933,7 +940,7 @@ impl DnsClient {
 
     async fn lookup_local_inner(&self, query: &Query, local_addr: &NameServerAddr) -> io::Result<Message> {
         let mut message = Message::new();
-        message.set_id(thread_rng().gen());
+        message.set_id(rand::random());
         message.set_recursion_desired(true);
         message.add_query(query.clone());
 

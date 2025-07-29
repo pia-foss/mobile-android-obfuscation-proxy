@@ -1,4 +1,3 @@
-#![cfg_attr(clippy, allow(blacklisted_name))]
 #![cfg(all(feature = "local", feature = "server"))]
 
 use std::net::SocketAddr;
@@ -9,9 +8,8 @@ use tokio::time::{self, Duration};
 use shadowsocks_service::{
     config::{Config, ConfigType, LocalConfig, LocalInstanceConfig, ProtocolType, ServerInstanceConfig},
     local::socks::client::socks5::Socks5UdpClient,
-    run_local,
-    run_server,
-    shadowsocks::{config::Mode, crypto::CipherKind, relay::socks5::Address, ServerConfig},
+    run_local, run_server,
+    shadowsocks::{ServerConfig, config::Mode, crypto::CipherKind, relay::socks5::Address},
 };
 
 const SERVER_ADDR: &str = "127.0.0.1:8093";
@@ -24,11 +22,9 @@ const METHOD: CipherKind = CipherKind::AES_128_GCM;
 
 fn get_svr_config() -> Config {
     let mut cfg = Config::new(ConfigType::Server);
-    cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
-        SERVER_ADDR.parse::<SocketAddr>().unwrap(),
-        PASSWORD.to_owned(),
-        METHOD,
-    ))];
+    cfg.server = vec![ServerInstanceConfig::with_server_config(
+        ServerConfig::new(SERVER_ADDR.parse::<SocketAddr>().unwrap(), PASSWORD.to_owned(), METHOD).unwrap(),
+    )];
     cfg.server[0].config.set_mode(Mode::TcpAndUdp);
     cfg
 }
@@ -40,11 +36,9 @@ fn get_cli_config() -> Config {
         ProtocolType::Socks,
     ))];
     cfg.local[0].config.mode = Mode::TcpAndUdp;
-    cfg.server = vec![ServerInstanceConfig::with_server_config(ServerConfig::new(
-        SERVER_ADDR.parse::<SocketAddr>().unwrap(),
-        PASSWORD.to_owned(),
-        METHOD,
-    ))];
+    cfg.server = vec![ServerInstanceConfig::with_server_config(
+        ServerConfig::new(SERVER_ADDR.parse::<SocketAddr>().unwrap(), PASSWORD.to_owned(), METHOD).unwrap(),
+    )];
     cfg
 }
 

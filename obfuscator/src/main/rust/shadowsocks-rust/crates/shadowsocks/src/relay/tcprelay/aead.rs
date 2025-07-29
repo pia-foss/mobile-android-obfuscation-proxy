@@ -1,6 +1,6 @@
 //! AEAD packet I/O facilities
 //!
-//! AEAD protocol is defined in <https://shadowsocks.org/en/spec/AEAD.html>.
+//! AEAD protocol is defined in <https://shadowsocks.org/doc/aead.html>.
 //!
 //! ```plain
 //! TCP request (before encryption)
@@ -37,7 +37,6 @@ use std::{
     pin::Pin,
     slice,
     task::{self, Poll},
-    u16,
 };
 
 use byte_string::ByteStr;
@@ -48,7 +47,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     context::Context,
-    crypto::{v1::Cipher, CipherKind},
+    crypto::{CipherKind, v1::Cipher},
 };
 
 /// AEAD packet payload must be smaller than 0x3FFF
@@ -65,7 +64,9 @@ pub enum ProtocolError {
     DecryptDataError,
     #[error("decrypt length failed")]
     DecryptLengthError,
-    #[error("buffer size too large ({0:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero")]
+    #[error(
+        "buffer size too large ({0:#x}), AEAD encryption protocol requires buffer to be smaller than 0x3FFF, the higher two bits must be set to zero"
+    )]
     DataTooLong(usize),
 }
 
@@ -81,6 +82,7 @@ impl From<ProtocolError> for io::Error {
     }
 }
 
+#[derive(Debug)]
 enum DecryptReadState {
     WaitSalt { key: Bytes },
     ReadLength,
@@ -306,7 +308,7 @@ impl DecryptedReader {
         };
 
         if plen > MAX_PACKET_SIZE {
-            // https://shadowsocks.org/en/spec/AEAD-Ciphers.html
+            // https://shadowsocks.org/doc/aead.html
             //
             // AEAD TCP protocol have reserved the higher two bits for future use
             return Err(ProtocolError::DataTooLong(plen));
@@ -321,6 +323,7 @@ impl DecryptedReader {
     }
 }
 
+#[derive(Debug)]
 enum EncryptWriteState {
     AssemblePacket,
     Writing { pos: usize },

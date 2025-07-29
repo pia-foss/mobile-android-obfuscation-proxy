@@ -1,7 +1,8 @@
 use std::{
-    io,
+    io::{self, ErrorKind},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::{Deref, DerefMut},
+    os::fd::AsRawFd,
     pin::Pin,
     task::{self, Poll},
 };
@@ -13,10 +14,8 @@ use tokio::{
 };
 
 use crate::net::{
+    AcceptOpts, AddrFamily, ConnectOpts,
     sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect},
-    AcceptOpts,
-    AddrFamily,
-    ConnectOpts,
 };
 
 /// A wrapper of `TcpStream`
@@ -82,8 +81,20 @@ pub fn set_disable_ip_fragmentation<S: AsRawFd>(_af: AddrFamily, _socket: &S) ->
 #[inline]
 pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) -> io::Result<UdpSocket> {
     let bind_addr = match (af, config.bind_local_addr) {
-        (AddrFamily::Ipv4, Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
-        (AddrFamily::Ipv6, Some(IpAddr::V6(ip))) => SocketAddr::new(ip.into(), 0),
+        (AddrFamily::Ipv4, Some(SocketAddr::V4(addr))) => addr.into(),
+        (AddrFamily::Ipv4, Some(SocketAddr::V6(addr))) => {
+            // Map IPv6 bind_local_addr to IPv4 if AF is IPv4
+            match addr.ip().to_ipv4_mapped() {
+                Some(addr) => SocketAddr::new(IpAddr::from(addr), 0),
+                None => return Err(io::Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
+            }
+        }
+        (AddrFamily::Ipv6, Some(SocketAddr::V6(addr))) => addr.into(),
+        (AddrFamily::Ipv6, Some(SocketAddr::V4(addr))) => {
+            // Map IPv4 bind_local_addr to IPv6 if AF is IPv6
+            let ip_addr: IpAddr = addr.ip().to_ipv6_mapped().into();
+            SocketAddr::new(ip_addr, 0)
+        }
         (AddrFamily::Ipv4, ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
         (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
