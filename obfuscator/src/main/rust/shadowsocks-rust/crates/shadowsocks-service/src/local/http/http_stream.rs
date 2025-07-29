@@ -62,35 +62,34 @@ impl ProxyHttpStream {
     pub async fn connect_https(stream: AutoProxyClientStream, domain: &str) -> io::Result<ProxyHttpStream> {
         use log::warn;
         use once_cell::sync::Lazy;
+        use rustls_native_certs::CertificateResult;
         use std::sync::Arc;
         use tokio_rustls::{
-            rustls::pki_types::ServerName,
-            rustls::{ClientConfig, RootCertStore},
             TlsConnector,
+            rustls::{ClientConfig, RootCertStore, pki_types::ServerName},
         };
 
         static TLS_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
             let mut config = ClientConfig::builder()
-                .with_root_certificates(match rustls_native_certs::load_native_certs() {
-                    Ok(certs) => {
-                        let mut store = RootCertStore::empty();
+                .with_root_certificates({
+                    // Load WebPKI roots (Mozilla's root certificates)
+                    let mut store = RootCertStore::empty();
+                    store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-                        for cert in certs {
-                            if let Err(err) = store.add(cert) {
-                                warn!("failed to add cert (native), error: {}", err);
-                            }
+                    let CertificateResult { certs, errors, .. } = rustls_native_certs::load_native_certs();
+                    if !errors.is_empty() {
+                        for error in errors {
+                            warn!("failed to load cert (native), error: {}", error);
                         }
-
-                        store
                     }
-                    Err(err) => {
-                        warn!("failed to load native certs, {}, going to load from webpki-roots", err);
 
-                        let mut store = RootCertStore::empty();
-                        store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-
-                        store
+                    for cert in certs {
+                        if let Err(err) = store.add(cert) {
+                            warn!("failed to add cert (native), error: {}", err);
+                        }
                     }
+
+                    store
                 })
                 .with_no_client_auth();
 

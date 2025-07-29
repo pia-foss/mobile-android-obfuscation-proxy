@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.kape.obfuscator.testapp"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.kape.obfuscator.testapp"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
     }
@@ -30,15 +30,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     packaging {
         jniLibs {
             useLegacyPackaging = true
         }
     }
+}
+
+kotlin {
+    jvmToolchain(17)
 }
 
 dependencies {

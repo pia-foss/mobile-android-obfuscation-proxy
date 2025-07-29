@@ -11,7 +11,6 @@ use std::{
 
 #[cfg(feature = "hickory-dns")]
 use arc_swap::ArcSwap;
-use async_trait::async_trait;
 use cfg_if::cfg_if;
 #[cfg(feature = "hickory-dns")]
 use hickory_resolver::config::ResolverConfig;
@@ -19,7 +18,7 @@ use hickory_resolver::config::ResolverConfig;
 use hickory_resolver::config::ResolverOpts;
 #[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))]
 use log::error;
-use log::{log_enabled, trace, Level};
+use log::{Level, log_enabled, trace};
 use tokio::net::lookup_host;
 #[cfg(all(feature = "hickory-dns", unix, not(target_os = "android")))]
 use tokio::task::JoinHandle;
@@ -31,18 +30,24 @@ use crate::net::ConnectOpts;
 use super::hickory_dns_resolver::DnsResolver as HickoryDnsResolver;
 
 /// Abstract DNS resolver
-#[async_trait]
+#[trait_variant::make(Send)]
+#[dynosaur::dynosaur(DynDnsResolve)]
 pub trait DnsResolve {
     /// Resolves `addr:port` to a list of `SocketAddr`
     async fn resolve(&self, addr: &str, port: u16) -> io::Result<Vec<SocketAddr>>;
 }
 
+// Equivalent to (dyn DnsResolve + Send + Sync)
+unsafe impl Send for DynDnsResolve<'_> {}
+unsafe impl Sync for DynDnsResolve<'_> {}
+
 #[cfg(feature = "hickory-dns")]
+#[derive(Debug)]
 pub struct HickoryDnsSystemResolver {
     resolver: ArcSwap<HickoryDnsResolver>,
-    #[cfg_attr(windows, allow(dead_code))]
+    #[cfg_attr(any(windows, target_os = "android"), allow(dead_code))]
     connect_opts: ConnectOpts,
-    #[cfg_attr(windows, allow(dead_code))]
+    #[cfg_attr(any(windows, target_os = "android"), allow(dead_code))]
     opts: Option<ResolverOpts>,
 }
 
@@ -62,7 +67,7 @@ pub enum DnsResolver {
     #[cfg(feature = "hickory-dns")]
     HickoryDns(HickoryDnsResolver),
     /// Customized Resolver
-    Custom(Box<dyn DnsResolve + Send + Sync>),
+    Custom(Box<DynDnsResolve<'static>>),
 }
 
 impl Default for DnsResolver {
@@ -156,7 +161,7 @@ async fn hickory_dns_notify_update_dns(resolver: Arc<HickoryDnsSystemResolver>) 
 
     use super::hickory_dns_resolver::create_resolver;
 
-    static DNS_RESOLV_FILE_PATH: &str = "/etc/resolv.conf";
+    const DNS_RESOLV_FILE_PATH: &str = "/etc/resolv.conf";
 
     if !Path::new(DNS_RESOLV_FILE_PATH).exists() {
         trace!("resolv file {DNS_RESOLV_FILE_PATH} doesn't exist");
@@ -281,12 +286,15 @@ impl DnsResolver {
     where
         R: DnsResolve + Send + Sync + 'static,
     {
-        DnsResolver::Custom(Box::new(custom) as Box<dyn DnsResolve + Send + Sync>)
+        DnsResolver::Custom(DynDnsResolve::boxed(custom))
     }
 
     /// Resolve address into `SocketAddr`s
-    #[allow(clippy::needless_lifetimes)]
-    pub async fn resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
+    pub async fn resolve<'a>(
+        &self,
+        addr: &'a str,
+        port: u16,
+    ) -> io::Result<impl Iterator<Item = SocketAddr> + 'a + use<'a>> {
         struct ResolverLogger<'x, 'y> {
             resolver: &'x DnsResolver,
             addr: &'y str,
@@ -311,7 +319,7 @@ impl DnsResolver {
             }
         }
 
-        impl<'x, 'y> Drop for ResolverLogger<'x, 'y> {
+        impl Drop for ResolverLogger<'_, '_> {
             fn drop(&mut self) {
                 match self.start_time {
                     Some(start_time) => {

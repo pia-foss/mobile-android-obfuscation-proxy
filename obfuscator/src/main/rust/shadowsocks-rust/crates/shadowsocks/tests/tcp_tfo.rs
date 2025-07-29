@@ -13,6 +13,7 @@ use byte_string::ByteStr;
 use futures::future;
 use log::debug;
 use shadowsocks::{
+    ProxyClientStream, ProxyListener, ServerConfig,
     config::ServerType,
     context::Context,
     crypto::CipherKind,
@@ -21,9 +22,6 @@ use shadowsocks::{
         socks5::Address,
         tcprelay::utils::{copy_from_encrypted, copy_to_encrypted},
     },
-    ProxyClientStream,
-    ProxyListener,
-    ServerConfig,
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -34,7 +32,7 @@ use tokio::{
 async fn tcp_tunnel_tfo() {
     let _ = env_logger::try_init();
 
-    let svr_cfg = ServerConfig::new(("127.0.0.1", 41000), "?", CipherKind::NONE);
+    let svr_cfg = ServerConfig::new(("127.0.0.1", 41000), "", CipherKind::NONE).unwrap();
     let svr_cfg_client = svr_cfg.clone();
 
     tokio::spawn(async move {
@@ -99,6 +97,6 @@ async fn tcp_tunnel_tfo() {
 
     println!("{:?}", ByteStr::new(&buffer));
 
-    static HTTP_RESPONSE_STATUS: &[u8] = b"HTTP/1.0 200 OK\r\n";
+    const HTTP_RESPONSE_STATUS: &[u8] = b"HTTP/1.0 200 OK\r\n";
     assert!(buffer.starts_with(HTTP_RESPONSE_STATUS));
 }

@@ -30,7 +30,7 @@ pub fn adjust_nofile() {
             {
                 use std::ptr;
 
-                extern "C" {
+                unsafe extern "C" {
                     fn sysctlbyname(
                         name: *const libc::c_char,
                         oldp: *mut libc::c_void,
@@ -120,7 +120,7 @@ pub fn run_as_user(uname: &str) -> std::io::Result<()> {
             return Err(err);
         }
 
-        if libc::initgroups(pwd.pw_name, pwd.pw_gid.try_into().unwrap()) != 0 {
+        if libc::initgroups(pwd.pw_name, pwd.pw_gid as _) != 0 {
             let err = Error::last_os_error();
             error!(
                 "could not change supplementary groups to user {:?}'s gid: {}, uid: {}, error: {}",

@@ -21,12 +21,12 @@ jobs:
         run: ./gradlew clean assembleDebug --info
       - name: build release
         run: ./gradlew clean assembleRelease --info
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: testapp-apk
           path: testapp/build/outputs/apk/
           if-no-files-found: error
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: obfuscator-aars
           path: obfuscator/build/outputs/aar/

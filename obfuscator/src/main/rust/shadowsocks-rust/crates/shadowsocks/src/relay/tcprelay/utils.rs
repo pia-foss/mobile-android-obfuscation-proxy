@@ -155,6 +155,7 @@ where
 
 fn plain_read_buffer_size(method: CipherKind) -> usize {
     match method.category() {
+        #[cfg(feature = "aead-cipher")]
         CipherCategory::Aead => super::aead::MAX_PACKET_SIZE,
         #[cfg(feature = "stream-cipher")]
         CipherCategory::Stream => 1 << 14,
@@ -239,7 +240,7 @@ where
     }
 }
 
-impl<'a, A, B> Future for CopyBidirectional<'a, A, B>
+impl<A, B> Future for CopyBidirectional<'_, A, B>
 where
     A: AsyncRead + AsyncWrite + Unpin + ?Sized,
     B: AsyncRead + AsyncWrite + Unpin + ?Sized,
@@ -254,8 +255,7 @@ where
                     Ok(..) => {
                         trace!(
                             "copy bidirection ends, a_to_b: {:?}, b_to_a: {:?}",
-                            self.a_to_b,
-                            self.b_to_a
+                            self.a_to_b, self.b_to_a
                         );
                     }
                     Err(ref err) => {
