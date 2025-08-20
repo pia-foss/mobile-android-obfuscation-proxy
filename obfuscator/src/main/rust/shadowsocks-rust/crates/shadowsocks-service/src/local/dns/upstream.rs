@@ -12,18 +12,17 @@ use std::{
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
-use hickory_resolver::proto::{ProtoError, ProtoErrorKind, op::Message};
-use log::{error, trace};
-use lru_time_cache::{Entry, LruCache};
+use hickory_resolver::proto::{
+    error::{ProtoError, ProtoErrorKind},
+    op::Message,
+};
+use log::trace;
+use rand::{thread_rng, Rng};
 use shadowsocks::{
     config::ServerConfig,
     context::SharedContext,
     net::{ConnectOpts, TcpStream as ShadowTcpStream, UdpSocket as ShadowUdpSocket},
-    relay::{
-        Address,
-        tcprelay::ProxyClientStream,
-        udprelay::{ProxySocket, options::UdpSocketControlData},
-    },
+    relay::{tcprelay::ProxyClientStream, udprelay::ProxySocket, Address},
 };
 #[cfg(unix)]
 use tokio::net::UnixStream;
@@ -33,11 +32,7 @@ use tokio::{
     time,
 };
 
-use crate::{
-    DEFAULT_UDP_EXPIRY_DURATION,
-    local::net::udp::generate_client_session_id,
-    net::{FlowStat, MonProxySocket, MonProxyStream, packet_window::PacketWindowFilter},
-};
+use crate::net::{FlowStat, MonProxySocket, MonProxyStream};
 
 /// Collection of various DNS connections
 #[allow(clippy::large_enum_variant)]
@@ -57,10 +52,8 @@ pub enum DnsClient {
         stream: ProxyClientStream<MonProxyStream<ShadowTcpStream>>,
     },
     UdpRemote {
-        socket: MonProxySocket<ShadowUdpSocket>,
+        socket: MonProxySocket,
         ns: Address,
-        control: UdpSocketControlData,
-        server_windows: LruCache<u64, PacketWindowFilter>,
     },
 }
 
@@ -107,18 +100,9 @@ impl DnsClient {
         connect_opts: &ConnectOpts,
         flow_stat: Arc<FlowStat>,
     ) -> io::Result<DnsClient> {
-        let socket = ProxySocket::connect_with_opts(context.clone(), svr_cfg, connect_opts).await?;
-        let socket = MonProxySocket::from_socket(socket, flow_stat.clone());
-        let mut control = UdpSocketControlData::default();
-        control.client_session_id = generate_client_session_id();
-        control.packet_id = 0; // AEAD-2022 Packet ID starts from 1
-        Ok(DnsClient::UdpRemote {
-            socket,
-            ns,
-            control,
-            // NOTE: expiry duration should be configurable. But the Client is held by DnsClientCache, which expires very quickly.
-            server_windows: LruCache::with_expiry_duration(DEFAULT_UDP_EXPIRY_DURATION),
-        })
+        let socket = ProxySocket::connect_with_opts(context, svr_cfg, connect_opts).await?;
+        let socket = MonProxySocket::from_socket(socket, flow_stat);
+        Ok(DnsClient::UdpRemote { socket, ns })
     }
 
     /// Make a DNS lookup
@@ -138,7 +122,7 @@ impl DnsClient {
 
     async fn inner_lookup(&mut self, msg: &mut Message) -> Result<Message, ProtoError> {
         // Make a random ID
-        msg.set_id(rand::random());
+        msg.set_id(thread_rng().gen());
 
         trace!("DNS lookup {:?}", msg);
 
@@ -148,7 +132,7 @@ impl DnsClient {
                 let bytes = msg.to_vec()?;
                 socket.send(&bytes).await?;
 
-                let mut recv_buf = [0u8; 512];
+                let mut recv_buf = [0u8; 256];
                 let n = socket.recv(&mut recv_buf).await?;
 
                 Message::from_vec(&recv_buf[..n])
@@ -156,38 +140,12 @@ impl DnsClient {
             #[cfg(unix)]
             DnsClient::UnixStream { ref mut stream } => stream_query(stream, msg).await,
             DnsClient::TcpRemote { ref mut stream } => stream_query(stream, msg).await,
-            DnsClient::UdpRemote {
-                ref mut socket,
-                ref ns,
-                ref mut control,
-                ref mut server_windows,
-            } => {
-                control.packet_id = match control.packet_id.checked_add(1) {
-                    Some(i) => i,
-                    None => return Err(ProtoErrorKind::Message("packet id overflows").into()),
-                };
-
+            DnsClient::UdpRemote { ref mut socket, ref ns } => {
                 let bytes = msg.to_vec()?;
-                socket.send_with_ctrl(ns, control, &bytes).await?;
+                socket.send(ns, &bytes).await?;
 
-                let mut recv_buf = [0u8; 512];
-                let (n, _, recv_control) = socket.recv_with_ctrl(&mut recv_buf).await?;
-
-                if let Some(server_control) = recv_control {
-                    let filter = match server_windows.entry(server_control.server_session_id) {
-                        Entry::Occupied(occ) => occ.into_mut(),
-                        Entry::Vacant(vac) => vac.insert(PacketWindowFilter::new()),
-                    };
-
-                    if !filter.validate_packet_id(server_control.packet_id, u64::MAX) {
-                        error!(
-                            "dns client for {} packet_id {} out of window",
-                            ns, server_control.packet_id
-                        );
-
-                        return Err(ProtoErrorKind::Message("packet id out of window").into());
-                    }
-                }
+                let mut recv_buf = [0u8; 256];
+                let (n, _) = socket.recv(&mut recv_buf).await?;
 
                 Message::from_vec(&recv_buf[..n])
             }
@@ -231,8 +189,8 @@ impl DnsClient {
         #[cfg(windows)]
         fn check_peekable<F: std::os::windows::io::AsRawSocket>(s: &mut F) -> bool {
             use windows_sys::{
-                Win32::Networking::WinSock::{MSG_PEEK, SOCKET, recv},
                 core::PSTR,
+                Win32::Networking::WinSock::{recv, MSG_PEEK, SOCKET},
             };
 
             let sock = s.as_raw_socket() as SOCKET;

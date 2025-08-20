@@ -1,7 +1,7 @@
 use std::{
-    io::{self, ErrorKind},
+    io,
     mem,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     os::unix::io::{AsRawFd, RawFd},
     pin::Pin,
     ptr,
@@ -19,9 +19,11 @@ use tokio::{
 use tokio_tfo::TfoStream;
 
 use crate::net::{
-    AcceptOpts, AddrFamily, ConnectOpts,
     sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack},
     udp::{BatchRecvMessage, BatchSendMessage},
+    AcceptOpts,
+    AddrFamily,
+    ConnectOpts,
 };
 
 /// A `TcpStream` that supports TFO (TCP Fast Open)
@@ -228,19 +230,8 @@ pub fn set_disable_ip_fragmentation<S: AsRawFd>(af: AddrFamily, socket: &S) -> i
 #[inline]
 pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) -> io::Result<UdpSocket> {
     let bind_addr = match (af, config.bind_local_addr) {
-        (AddrFamily::Ipv4, Some(SocketAddr::V4(addr))) => addr.into(),
-        (AddrFamily::Ipv4, Some(SocketAddr::V6(addr))) => {
-            // Map IPv6 bind_local_addr to IPv4 if AF is IPv4
-            match addr.ip().to_ipv4_mapped() {
-                Some(addr) => SocketAddr::new(addr.into(), 0),
-                None => return Err(io::Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
-            }
-        }
-        (AddrFamily::Ipv6, Some(SocketAddr::V6(addr))) => addr.into(),
-        (AddrFamily::Ipv6, Some(SocketAddr::V4(addr))) => {
-            // Map IPv4 bind_local_addr to IPv6 if AF is IPv6
-            SocketAddr::new(addr.ip().to_ipv6_mapped().into(), 0)
-        }
+        (AddrFamily::Ipv4, Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
+        (AddrFamily::Ipv6, Some(IpAddr::V6(ip))) => SocketAddr::new(ip.into(), 0),
         (AddrFamily::Ipv4, ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
         (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
@@ -249,7 +240,7 @@ pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) ->
 }
 
 /// Create a `UdpSocket` binded to `bind_addr`
-pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOpts) -> io::Result<UdpSocket> {
+pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, _config: &ConnectOpts) -> io::Result<UdpSocket> {
     let af = AddrFamily::from(bind_addr);
 
     let socket = if af != AddrFamily::Ipv6 {
@@ -263,10 +254,8 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
         UdpSocket::from_std(socket.into())?
     };
 
-    if !config.udp.allow_fragmentation {
-        if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
-            warn!("failed to disable IP fragmentation, error: {}", err);
-        }
+    if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
+        warn!("failed to disable IP fragmentation, error: {}", err);
     }
 
     Ok(socket)

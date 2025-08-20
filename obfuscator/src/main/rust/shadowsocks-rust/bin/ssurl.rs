@@ -6,7 +6,7 @@
 use std::process::ExitCode;
 
 use clap::{Arg, ArgAction, Command, ValueHint};
-use qrcode::{QrCode, types::Color};
+use qrcode::{types::Color, QrCode};
 
 use shadowsocks_service::{
     config::{Config, ConfigType, ServerInstanceConfig},
@@ -158,5 +158,5 @@ fn main() -> ExitCode {
     }
 
     println!("Use -h for more detail");
-    ExitCode::FAILURE
+    return ExitCode::FAILURE;
 }

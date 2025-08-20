@@ -2,17 +2,18 @@
 
 use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
+use async_trait::async_trait;
 use log::{debug, error, info};
 use shadowsocks::{
-    ServerAddr,
     relay::{socks5::Address, udprelay::MAXIMUM_UDP_PAYLOAD_SIZE},
+    ServerAddr,
 };
 use tokio::{net::UdpSocket, time};
 
 use crate::local::{
     context::ServiceContext,
     loadbalancing::PingBalancer,
-    net::{UdpAssociationManager, UdpInboundWrite, udp::listener::create_standard_udp_listener},
+    net::{udp::listener::create_standard_udp_listener, UdpAssociationManager, UdpInboundWrite},
 };
 
 pub struct TunnelUdpServerBuilder {
@@ -56,16 +57,14 @@ impl TunnelUdpServerBuilder {
     pub async fn build(self) -> io::Result<TunnelUdpServer> {
         cfg_if::cfg_if! {
             if #[cfg(target_os = "macos")] {
-                let socket = match self.launchd_socket_name {
-                    Some(launchd_socket_name) => {
-                        use tokio::net::UdpSocket as TokioUdpSocket;
-                        use crate::net::launch_activate_socket::get_launch_activate_udp_socket;
+                let socket = if let Some(launchd_socket_name) = self.launchd_socket_name {
+                    use tokio::net::UdpSocket as TokioUdpSocket;
+                    use crate::net::launch_activate_socket::get_launch_activate_udp_socket;
 
-                        let std_socket = get_launch_activate_udp_socket(&launchd_socket_name, true)?;
-                        TokioUdpSocket::from_std(std_socket)?
-                    } _ => {
-                        create_standard_udp_listener(&self.context, &self.client_config).await?.into()
-                    }
+                    let std_socket = get_launch_activate_udp_socket(&launchd_socket_name)?;
+                    TokioUdpSocket::from_std(std_socket)?
+                } else {
+                    create_standard_udp_listener(&self.context, &self.client_config).await?.into()
                 };
             } else {
                 let socket = create_standard_udp_listener(&self.context, &self.client_config).await?.into();
@@ -88,6 +87,7 @@ struct TunnelUdpInboundWriter {
     inbound: Arc<UdpSocket>,
 }
 
+#[async_trait]
 impl UdpInboundWrite for TunnelUdpInboundWriter {
     async fn send_to(&self, peer_addr: SocketAddr, _remote_addr: &Address, data: &[u8]) -> io::Result<()> {
         self.inbound.send_to(data, peer_addr).await.map(|_| ())

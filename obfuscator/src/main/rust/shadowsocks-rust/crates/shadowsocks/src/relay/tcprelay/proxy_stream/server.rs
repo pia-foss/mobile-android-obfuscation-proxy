@@ -25,7 +25,6 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
 enum ProxyServerStreamWriteState {
     #[cfg(feature = "aead-cipher-2022")]
     PrepareHeader(Option<std::task::Waker>),
@@ -33,7 +32,6 @@ enum ProxyServerStreamWriteState {
 }
 
 /// A stream for communicating with shadowsocks' proxy client
-#[derive(Debug)]
 #[pin_project]
 pub struct ProxyServerStream<S> {
     #[pin]
@@ -44,15 +42,7 @@ pub struct ProxyServerStream<S> {
 }
 
 impl<S> ProxyServerStream<S> {
-    /// Create a `ProxyServerStream` from a connection stream
-    pub fn from_stream(context: SharedContext, stream: S, method: CipherKind, key: &[u8]) -> ProxyServerStream<S> {
-        ProxyServerStream::from_stream_with_user_manager(context, stream, method, key, None)
-    }
-
-    /// Create a `ProxyServerStream` from a connection stream
-    ///
-    /// Set `user_manager` to enable support of verifying EIH users.
-    pub fn from_stream_with_user_manager(
+    pub(crate) fn from_stream(
         context: SharedContext,
         stream: S,
         method: CipherKind,
@@ -69,7 +59,7 @@ impl<S> ProxyServerStream<S> {
         #[cfg(not(feature = "aead-cipher-2022"))]
         let writer_state = ProxyServerStreamWriteState::Established;
 
-        const EMPTY_IDENTITY: [Bytes; 0] = [];
+        static EMPTY_IDENTITY: [Bytes; 0] = [];
         ProxyServerStream {
             stream: CryptoStream::from_stream_with_identity(
                 &context,
@@ -162,7 +152,7 @@ where
 
         // Wakeup writer task because we have already received the salt
         #[cfg(feature = "aead-cipher-2022")]
-        if let ProxyServerStreamWriteState::PrepareHeader(waker) = this.writer_state {
+        if let ProxyServerStreamWriteState::PrepareHeader(ref mut waker) = this.writer_state {
             if let Some(waker) = waker.take() {
                 waker.wake();
             }

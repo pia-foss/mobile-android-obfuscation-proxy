@@ -58,7 +58,6 @@ pub enum PluginMode {
 }
 
 /// A shadowsocks SIP004 Plugin
-#[derive(Debug)]
 pub struct Plugin {
     process: Child,
     local_addr: SocketAddr,

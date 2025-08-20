@@ -11,18 +11,21 @@ android {
     namespace = "com.kape.obfuscator"
     ndkVersion = sdkDirectory.resolve("ndk").listFilesOrdered().last().name
 
-    compileSdk = 36
+    compileSdk = 34
     defaultConfig {
         minSdk = 24
-        externalNativeBuild.ndkBuild {
-            abiFilters("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            arguments("-j${Runtime.getRuntime().availableProcessors()}")
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
         }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
     }
 
     buildTypes {
@@ -36,10 +39,6 @@ android {
             useLegacyPackaging = true
         }
     }
-}
-
-kotlin {
-    jvmToolchain(17)
 }
 
 cargo {
@@ -64,21 +63,11 @@ cargo {
     exec = { spec, toolchain ->
         run {
             try {
-                Runtime.getRuntime().exec(arrayOf("python3", "-V"))
+                Runtime.getRuntime().exec("python3 -V >/dev/null 2>&1")
                 spec.environment("RUST_ANDROID_GRADLE_PYTHON_COMMAND", "python3")
-                project.logger.lifecycle("Python 3 detected.")
             } catch (e: java.io.IOException) {
-                project.logger.lifecycle("No python 3 detected.")
-                try {
-                    Runtime.getRuntime().exec(arrayOf("python", "-V"))
-                    spec.environment("RUST_ANDROID_GRADLE_PYTHON_COMMAND", "python")
-                    project.logger.lifecycle("Python detected.")
-                } catch (e: java.io.IOException) {
-                    throw GradleException("No any python version detected. You should install the python first to compile project.")
-                }
+                throw GradleException("Please install Python3 in order to compile.")
             }
-            // https://developer.android.com/guide/practices/page-sizes#other-build-systems
-            spec.environment("RUST_ANDROID_GRADLE_CC_LINK_ARG", "-Wl,-z,max-page-size=16384,-soname,lib$libname.so")
             spec.environment("RUST_ANDROID_GRADLE_LINKER_WRAPPER_PY", "$projectDir/$module/../linker-wrapper.py")
             spec.environment("RUST_ANDROID_GRADLE_TARGET", "target/${toolchain.target}/$profile/lib$libname.so")
         }
@@ -86,11 +75,11 @@ cargo {
 }
 
 tasks.whenTaskAdded {
-    when (name) {
-        "mergeDebugJniLibFolders", "mergeReleaseJniLibFolders" -> dependsOn("cargoBuild")
+    if (this.name == "javaPreCompileDebug" || this.name == "javaPreCompileRelease") {
+        this.dependsOn("cargoBuild")
     }
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }

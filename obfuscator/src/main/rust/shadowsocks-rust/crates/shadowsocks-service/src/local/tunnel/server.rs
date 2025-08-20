@@ -2,8 +2,8 @@
 
 use std::{io, sync::Arc, time::Duration};
 
-use futures::{FutureExt, future};
-use shadowsocks::{ServerAddr, config::Mode, relay::socks5::Address};
+use futures::{future, FutureExt};
+use shadowsocks::{config::Mode, relay::socks5::Address, ServerAddr};
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 

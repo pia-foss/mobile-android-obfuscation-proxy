@@ -7,13 +7,12 @@ use log::warn;
 
 use crate::{
     config::{ReplayAttackPolicy, ServerType},
-    crypto::CipherKind,
+    crypto::{v1::random_iv_or_salt, CipherKind},
     dns_resolver::DnsResolver,
     security::replay::ReplayProtector,
 };
 
 /// Service context
-#[derive(Debug)]
 pub struct Context {
     // Protector against replay attack
     // The actual replay detection behavior is implemented in ReplayProtector
@@ -50,7 +49,6 @@ impl Context {
     /// Check if nonce exist or not
     ///
     /// If not, set into the current bloom filter
-    #[cfg(any(feature = "stream-cipher", feature = "aead-cipher", feature = "aead-cipher-2022"))]
     #[inline(always)]
     fn check_nonce_and_set(&self, method: CipherKind, nonce: &[u8]) -> bool {
         match self.replay_policy {
@@ -65,10 +63,7 @@ impl Context {
             return;
         }
 
-        #[cfg(any(feature = "stream-cipher", feature = "aead-cipher", feature = "aead-cipher-2022"))]
         loop {
-            use crate::crypto::utils::random_iv_or_salt;
-
             random_iv_or_salt(nonce);
 
             // Salt already exists, generate a new one.
@@ -77,12 +72,6 @@ impl Context {
             }
 
             break;
-        }
-
-        #[cfg(not(any(feature = "stream-cipher", feature = "aead-cipher", feature = "aead-cipher-2022")))]
-        if !nonce.is_empty() {
-            let _ = unique;
-            panic!("{method} don't know how to generate nonce");
         }
     }
 
@@ -133,11 +122,8 @@ impl Context {
     }
 
     /// Resolves DNS address to `SocketAddr`s
-    pub async fn dns_resolve<'a>(
-        &self,
-        addr: &'a str,
-        port: u16,
-    ) -> io::Result<impl Iterator<Item = SocketAddr> + 'a + use<'a>> {
+    #[allow(clippy::needless_lifetimes)]
+    pub async fn dns_resolve<'a>(&self, addr: &'a str, port: u16) -> io::Result<impl Iterator<Item = SocketAddr> + 'a> {
         self.dns_resolver.resolve(addr, port).await
     }
 
@@ -156,7 +142,7 @@ impl Context {
         self.replay_policy = replay_policy;
     }
 
-    /// Get policy against replay attack
+    /// Get policy against replay attach
     pub fn replay_attack_policy(&self) -> ReplayAttackPolicy {
         self.replay_policy
     }

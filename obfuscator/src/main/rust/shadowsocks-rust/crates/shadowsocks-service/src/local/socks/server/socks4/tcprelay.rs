@@ -21,7 +21,12 @@ use crate::local::{
 };
 
 use crate::local::socks::socks4::{
-    Address, Command, Error as Socks4Error, HandshakeRequest, HandshakeResponse, ResultCode,
+    Address,
+    Command,
+    Error as Socks4Error,
+    HandshakeRequest,
+    HandshakeResponse,
+    ResultCode,
 };
 
 pub struct Socks4TcpHandler {
@@ -97,13 +102,7 @@ impl Socks4TcpHandler {
         } else {
             let server = self.balancer.best_tcp_server();
 
-            let r = AutoProxyClientStream::connect_with_opts(
-                self.context,
-                &server,
-                &target_addr,
-                server.connect_opts_ref(),
-            )
-            .await;
+            let r = AutoProxyClientStream::connect(self.context, &server, &target_addr).await;
             server_opt = Some(server);
 
             r

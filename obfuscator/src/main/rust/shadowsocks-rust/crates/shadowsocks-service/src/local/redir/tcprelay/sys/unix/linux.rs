@@ -5,8 +5,9 @@ use std::{
     os::unix::io::AsRawFd,
 };
 
+use async_trait::async_trait;
 use log::warn;
-use shadowsocks::net::{AcceptOpts, is_dual_stack_addr, set_tcp_fastopen};
+use shadowsocks::net::{is_dual_stack_addr, set_tcp_fastopen, AcceptOpts};
 use socket2::SockAddr;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 
@@ -18,6 +19,7 @@ use crate::{
     },
 };
 
+#[async_trait]
 impl TcpListenerRedirExt for TcpListener {
     async fn bind_redir(ty: RedirType, addr: SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
         match ty {
@@ -113,7 +115,7 @@ fn get_original_destination_addr(s: &TcpStream) -> io::Result<SocketAddr> {
 
     unsafe {
         let (_, target_addr) = SockAddr::try_init(|target_addr, target_addr_len| {
-            // No sufficient method to know whether the destination IPv4 or IPv6.
+            // No suffcient method to know whether the destination IPv4 or IPv6.
             // Follow the method in shadowsocks-libev.
 
             let ret = libc::getsockopt(

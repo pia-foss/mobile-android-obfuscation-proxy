@@ -1,5 +1,10 @@
 //! UDP socket wrappers
 
+use std::{
+    io,
+    net::SocketAddr,
+    ops::{Deref, DerefMut},
+};
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -7,11 +12,8 @@
     target_os = "ios",
     target_os = "freebsd"
 ))]
-use std::io::{ErrorKind, IoSlice, IoSliceMut};
 use std::{
-    io,
-    net::SocketAddr,
-    ops::{Deref, DerefMut},
+    io::{ErrorKind, IoSlice, IoSliceMut},
     task::{Context as TaskContext, Poll},
 };
 
@@ -22,9 +24,8 @@ use std::{
     target_os = "ios",
     target_os = "freebsd"
 ))]
-use futures::future;
-use futures::ready;
-
+use futures::{future, ready};
+use pin_project::pin_project;
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -33,13 +34,14 @@ use futures::ready;
     target_os = "freebsd"
 ))]
 use tokio::io::Interest;
-use tokio::{io::ReadBuf, net::ToSocketAddrs};
 
-use crate::{ServerAddr, context::Context, relay::socks5::Address};
+use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
 use super::{
-    AcceptOpts, AddrFamily, ConnectOpts,
     sys::{bind_outbound_udp_socket, create_inbound_udp_socket, create_outbound_udp_socket},
+    AcceptOpts,
+    AddrFamily,
+    ConnectOpts,
 };
 
 /// Message struct for `batch_send`
@@ -51,11 +53,8 @@ use super::{
     target_os = "freebsd"
 ))]
 pub struct BatchSendMessage<'a> {
-    /// Optional target address
     pub addr: Option<SocketAddr>,
-    /// Data to be transmitted
     pub data: &'a [IoSlice<'a>],
-    /// Output result. The number of bytes sent by `batch_send`
     pub data_len: usize,
 }
 
@@ -68,28 +67,14 @@ pub struct BatchSendMessage<'a> {
     target_os = "freebsd"
 ))]
 pub struct BatchRecvMessage<'a> {
-    /// Peer address
     pub addr: SocketAddr,
-    /// Data buffer for receiving
     pub data: &'a mut [IoSliceMut<'a>],
-    /// Output result. The number of bytes received by `batch_recv`
     pub data_len: usize,
 }
 
-#[inline]
-fn make_mtu_error(packet_size: usize, mtu: usize) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::Other,
-        format!("UDP packet {} > MTU {}", packet_size, mtu),
-    )
-}
-
 /// Wrappers for outbound `UdpSocket`
-#[derive(Debug)]
-pub struct UdpSocket {
-    socket: tokio::net::UdpSocket,
-    mtu: Option<usize>,
-}
+#[pin_project]
+pub struct UdpSocket(#[pin] tokio::net::UdpSocket);
 
 impl UdpSocket {
     /// Connects to shadowsocks server
@@ -113,10 +98,7 @@ impl UdpSocket {
             }
         };
 
-        Ok(UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
+        Ok(UdpSocket(socket))
     }
 
     /// Connects to proxy target
@@ -140,44 +122,24 @@ impl UdpSocket {
             }
         };
 
-        Ok(UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
+        Ok(UdpSocket(socket))
     }
 
     /// Connects to shadowsocks server
     pub async fn connect_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
         let socket = create_outbound_udp_socket(From::from(addr), opts).await?;
         socket.connect(addr).await?;
-        Ok(UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
+        Ok(UdpSocket(socket))
     }
 
     /// Binds to a specific address with opts
     pub async fn connect_any_with_opts<AF: Into<AddrFamily>>(af: AF, opts: &ConnectOpts) -> io::Result<UdpSocket> {
-        create_outbound_udp_socket(af.into(), opts)
-            .await
-            .map(|socket| UdpSocket {
-                socket,
-                mtu: opts.udp.mtu,
-            })
-    }
-
-    /// Binds to a specific address as an outbound socket
-    #[inline]
-    pub async fn bind(addr: &SocketAddr) -> io::Result<UdpSocket> {
-        UdpSocket::bind_with_opts(addr, &ConnectOpts::default()).await
+        create_outbound_udp_socket(af.into(), opts).await.map(UdpSocket)
     }
 
     /// Binds to a specific address with opts as an outbound socket
     pub async fn bind_with_opts(addr: &SocketAddr, opts: &ConnectOpts) -> io::Result<UdpSocket> {
-        bind_outbound_udp_socket(addr, opts).await.map(|socket| UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
+        bind_outbound_udp_socket(addr, opts).await.map(UdpSocket)
     }
 
     /// Binds to a specific address (inbound)
@@ -189,116 +151,7 @@ impl UdpSocket {
     /// Binds to a specific address (inbound)
     pub async fn listen_with_opts(addr: &SocketAddr, opts: AcceptOpts) -> io::Result<UdpSocket> {
         let socket = create_inbound_udp_socket(addr, opts.ipv6_only).await?;
-        Ok(UdpSocket {
-            socket,
-            mtu: opts.udp.mtu,
-        })
-    }
-
-    /// Wrapper of `UdpSocket::poll_send`
-    pub fn poll_send(&self, cx: &mut TaskContext<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        // Check MTU
-        if let Some(mtu) = self.mtu {
-            if buf.len() > mtu {
-                return Err(make_mtu_error(buf.len(), mtu)).into();
-            }
-        }
-
-        self.socket.poll_send(cx, buf)
-    }
-
-    /// Wrapper of `UdpSocket::send`
-    #[inline]
-    pub async fn send(&self, buf: &[u8]) -> io::Result<usize> {
-        // Check MTU
-        if let Some(mtu) = self.mtu {
-            if buf.len() > mtu {
-                return Err(make_mtu_error(buf.len(), mtu));
-            }
-        }
-
-        self.socket.send(buf).await
-    }
-
-    /// Wrapper of `UdpSocket::poll_send_to`
-    pub fn poll_send_to(&self, cx: &mut TaskContext<'_>, buf: &[u8], target: SocketAddr) -> Poll<io::Result<usize>> {
-        // Check MTU
-        if let Some(mtu) = self.mtu {
-            if buf.len() > mtu {
-                return Err(make_mtu_error(buf.len(), mtu)).into();
-            }
-        }
-
-        self.socket.poll_send_to(cx, buf, target)
-    }
-
-    /// Wrapper of `UdpSocket::send_to`
-    #[inline]
-    pub async fn send_to<A: ToSocketAddrs>(&self, buf: &[u8], target: A) -> io::Result<usize> {
-        // Check MTU
-        if let Some(mtu) = self.mtu {
-            if buf.len() > mtu {
-                return Err(make_mtu_error(buf.len(), mtu));
-            }
-        }
-
-        self.socket.send_to(buf, target).await
-    }
-
-    /// Wrapper of `UdpSocket::poll_recv`
-    #[inline]
-    pub fn poll_recv(&self, cx: &mut TaskContext<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
-        ready!(self.socket.poll_recv(cx, buf))?;
-
-        if let Some(mtu) = self.mtu {
-            if buf.filled().len() > mtu {
-                return Err(make_mtu_error(buf.filled().len(), mtu)).into();
-            }
-        }
-
-        Ok(()).into()
-    }
-
-    /// Wrapper of `UdpSocket::recv`
-    #[inline]
-    pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        let n = self.socket.recv(buf).await?;
-
-        if let Some(mtu) = self.mtu {
-            if n > mtu {
-                return Err(make_mtu_error(n, mtu));
-            }
-        }
-
-        Ok(n)
-    }
-
-    /// Wrapper of `UdpSocket::poll_recv_from`
-    #[inline]
-    pub fn poll_recv_from(&self, cx: &mut TaskContext<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<SocketAddr>> {
-        let addr = ready!(self.socket.poll_recv_from(cx, buf))?;
-
-        if let Some(mtu) = self.mtu {
-            if buf.filled().len() > mtu {
-                return Err(make_mtu_error(buf.filled().len(), mtu)).into();
-            }
-        }
-
-        Ok(addr).into()
-    }
-
-    /// Wrapper of `UdpSocket::recv`
-    #[inline]
-    pub async fn recv_from(&self, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        let (n, addr) = self.socket.recv_from(buf).await?;
-
-        if let Some(mtu) = self.mtu {
-            if n > mtu {
-                return Err(make_mtu_error(n, mtu));
-            }
-        }
-
-        Ok((n, addr))
+        Ok(UdpSocket(socket))
     }
 
     /// Batch send packets
@@ -317,12 +170,9 @@ impl UdpSocket {
         use super::sys::batch_sendmsg;
 
         loop {
-            ready!(self.socket.poll_send_ready(cx))?;
+            ready!(self.0.poll_send_ready(cx))?;
 
-            match self
-                .socket
-                .try_io(Interest::WRITABLE, || batch_sendmsg(&self.socket, msgs))
-            {
+            match self.0.try_io(Interest::WRITABLE, || batch_sendmsg(&self.0, msgs)) {
                 Ok(n) => return Ok(n).into(),
                 Err(ref err) if err.kind() == ErrorKind::WouldBlock => {}
                 Err(err) => return Err(err).into(),
@@ -358,12 +208,9 @@ impl UdpSocket {
         use super::sys::batch_recvmsg;
 
         loop {
-            ready!(self.socket.poll_recv_ready(cx))?;
+            ready!(self.0.poll_recv_ready(cx))?;
 
-            match self
-                .socket
-                .try_io(Interest::READABLE, || batch_recvmsg(&self.socket, msgs))
-            {
+            match self.0.try_io(Interest::READABLE, || batch_recvmsg(&self.0, msgs)) {
                 Ok(n) => return Ok(n).into(),
                 Err(ref err) if err.kind() == ErrorKind::WouldBlock => {}
                 Err(err) => return Err(err).into(),
@@ -388,24 +235,24 @@ impl Deref for UdpSocket {
     type Target = tokio::net::UdpSocket;
 
     fn deref(&self) -> &Self::Target {
-        &self.socket
+        &self.0
     }
 }
 
 impl DerefMut for UdpSocket {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.socket
+        &mut self.0
     }
 }
 
 impl From<tokio::net::UdpSocket> for UdpSocket {
-    fn from(socket: tokio::net::UdpSocket) -> Self {
-        UdpSocket { socket, mtu: None }
+    fn from(s: tokio::net::UdpSocket) -> Self {
+        UdpSocket(s)
     }
 }
 
 impl From<UdpSocket> for tokio::net::UdpSocket {
     fn from(s: UdpSocket) -> tokio::net::UdpSocket {
-        s.socket
+        s.0
     }
 }

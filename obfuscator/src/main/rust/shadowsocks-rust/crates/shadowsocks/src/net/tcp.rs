@@ -19,14 +19,19 @@ use tokio::{
     net::{TcpListener as TokioTcpListener, TcpStream as TokioTcpStream},
 };
 
-use crate::{ServerAddr, context::Context, relay::socks5::Address};
+use crate::{context::Context, relay::socks5::Address, ServerAddr};
 
 use super::{
-    AcceptOpts, ConnectOpts, is_dual_stack_addr,
+    is_dual_stack_addr,
     sys::{
-        TcpStream as SysTcpStream, create_inbound_tcp_socket, set_common_sockopt_after_accept, set_tcp_fastopen,
+        create_inbound_tcp_socket,
+        set_common_sockopt_after_accept,
+        set_tcp_fastopen,
         socket_bind_dual_stack,
+        TcpStream as SysTcpStream,
     },
+    AcceptOpts,
+    ConnectOpts,
 };
 
 /// TcpStream for outbound connections
@@ -120,7 +125,6 @@ impl AsyncWrite for TcpStream {
 }
 
 /// `TcpListener` for accepting inbound connections
-#[derive(Debug)]
 pub struct TcpListener {
     inner: TokioTcpListener,
     accept_opts: AcceptOpts,
@@ -130,14 +134,6 @@ impl TcpListener {
     /// Creates a new TcpListener, which will be bound to the specified address.
     pub async fn bind_with_opts(addr: &SocketAddr, accept_opts: AcceptOpts) -> io::Result<TcpListener> {
         let socket = create_inbound_tcp_socket(addr, &accept_opts).await?;
-
-        if let Some(size) = accept_opts.tcp.send_buffer_size {
-            socket.set_send_buffer_size(size)?;
-        }
-
-        if let Some(size) = accept_opts.tcp.recv_buffer_size {
-            socket.set_recv_buffer_size(size)?;
-        }
 
         // On platforms with Berkeley-derived sockets, this allows to quickly
         // rebind a socket, without needing to wait for the OS to clean up the

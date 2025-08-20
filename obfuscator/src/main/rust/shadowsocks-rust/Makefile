@@ -6,9 +6,9 @@ all: build
 
 build:
 ifeq (${TARGET}, release)
-	cargo build --release --features "full"
+	cargo build --release --features "local-tun local-redir"
 else
-	cargo build --features "full"
+	cargo build --features "local-tun local-redir"
 endif
 
 install:

@@ -15,7 +15,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 use crate::{
     context::Context,
-    crypto::{CipherKind, v1::Cipher},
+    crypto::{v1::Cipher, CipherKind},
 };
 
 /// Stream protocol error

@@ -2,7 +2,7 @@
 //!
 //! Service for managing multiple relay servers. [Manage Multiple Users](https://github.com/shadowsocks/shadowsocks/wiki/Manage-Multiple-Users)
 
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{io, sync::Arc};
 
 use log::trace;
 use shadowsocks::net::{AcceptOpts, ConnectOpts};
@@ -36,13 +36,11 @@ pub async fn run(config: Config) -> io::Result<()> {
     let mut connect_opts = ConnectOpts {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fwmark: config.outbound_fwmark,
-        #[cfg(target_os = "freebsd")]
-        user_cookie: config.outbound_user_cookie,
 
         #[cfg(target_os = "android")]
         vpn_protect_path: config.outbound_vpn_protect_path,
 
-        bind_local_addr: config.outbound_bind_addr.map(|ip| SocketAddr::new(ip, 0)),
+        bind_local_addr: config.outbound_bind_addr,
         bind_interface: config.outbound_bind_interface,
 
         ..Default::default()
@@ -54,8 +52,6 @@ pub async fn run(config: Config) -> io::Result<()> {
     connect_opts.tcp.fastopen = config.fast_open;
     connect_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
     connect_opts.tcp.mptcp = config.mptcp;
-    connect_opts.udp.mtu = config.udp_mtu;
-    connect_opts.udp.allow_fragmentation = config.outbound_udp_allow_fragmentation;
 
     let mut accept_opts = AcceptOpts {
         ipv6_only: config.ipv6_only,
@@ -67,7 +63,6 @@ pub async fn run(config: Config) -> io::Result<()> {
     accept_opts.tcp.fastopen = config.fast_open;
     accept_opts.tcp.keepalive = config.keep_alive.or(Some(SERVER_DEFAULT_KEEPALIVE_TIMEOUT));
     accept_opts.tcp.mptcp = config.mptcp;
-    accept_opts.udp.mtu = config.udp_mtu;
 
     if let Some(resolver) =
         build_dns_resolver(config.dns, config.ipv6_first, config.dns_cache_size, &connect_opts).await

@@ -1,6 +1,6 @@
 //! Options for connecting to remote server
 
-use std::{net::SocketAddr, time::Duration};
+use std::{net::IpAddr, time::Duration};
 
 /// Options for connecting to TCP remote server
 #[derive(Debug, Clone, Default)]
@@ -30,18 +30,6 @@ pub struct TcpSocketOpts {
     pub mptcp: bool,
 }
 
-/// Options for UDP server
-#[derive(Debug, Clone, Default)]
-pub struct UdpSocketOpts {
-    /// Maximum Transmission Unit (MTU) for UDP socket `recv`
-    ///
-    /// NOTE: MTU includes IP header, UDP header, UDP payload
-    pub mtu: Option<usize>,
-
-    /// Outbound UDP socket allows IP fragmentation
-    pub allow_fragmentation: bool,
-}
-
 /// Options for connecting to remote server
 #[derive(Debug, Clone, Default)]
 pub struct ConnectOpts {
@@ -63,16 +51,13 @@ pub struct ConnectOpts {
     /// Outbound socket binds to this IP address, mostly for choosing network interfaces
     ///
     /// It only affects sockets that trying to connect to addresses with the same family
-    pub bind_local_addr: Option<SocketAddr>,
+    pub bind_local_addr: Option<IpAddr>,
 
     /// Outbound socket binds to interface
     pub bind_interface: Option<String>,
 
     /// TCP options
     pub tcp: TcpSocketOpts,
-
-    /// UDP options
-    pub udp: UdpSocketOpts,
 }
 
 /// Inbound connection options
@@ -80,9 +65,6 @@ pub struct ConnectOpts {
 pub struct AcceptOpts {
     /// TCP options
     pub tcp: TcpSocketOpts,
-
-    /// UDP options
-    pub udp: UdpSocketOpts,
 
     /// Enable IPV6_V6ONLY option for socket
     pub ipv6_only: bool,

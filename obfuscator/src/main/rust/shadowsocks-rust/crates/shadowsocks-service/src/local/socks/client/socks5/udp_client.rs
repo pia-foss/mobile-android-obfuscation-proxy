@@ -70,7 +70,7 @@ impl Socks5UdpClient {
         send_buf.put_slice(buf);
 
         let n = self.socket.send(&send_buf).await?;
-        Ok(n.saturating_sub(header_len))
+        Ok(if n <= header_len { 0 } else { n - header_len })
     }
 
     /// Returns a future that receives a single datagram on the socket. On success, the future resolves to the number of bytes read and the origin.

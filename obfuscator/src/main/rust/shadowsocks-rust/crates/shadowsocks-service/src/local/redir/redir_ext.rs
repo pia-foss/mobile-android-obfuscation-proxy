@@ -8,12 +8,14 @@ use std::{
     task::{Context, Poll},
 };
 
+use async_trait::async_trait;
 use shadowsocks::net::AcceptOpts;
 use tokio::net::TcpListener;
 
 use crate::config::RedirType;
 
 /// Extension function for `TcpListener` for setting extra options before `bind()`
+#[async_trait]
 pub trait TcpListenerRedirExt {
     // Create a TcpListener for transparent proxy
     //

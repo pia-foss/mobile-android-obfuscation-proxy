@@ -1,7 +1,7 @@
 use futures::future::{self, Either, FutureExt};
 use log::info;
 use std::io;
-use tokio::signal::unix::{SignalKind, signal};
+use tokio::signal::unix::{signal, SignalKind};
 
 /// Create a monitor future for signals
 ///

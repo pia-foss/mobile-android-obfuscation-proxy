@@ -30,14 +30,12 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
 enum ProxyClientStreamWriteState {
     Connect(Address),
     Connecting(BytesMut),
     Connected,
 }
 
-#[derive(Debug)]
 enum ProxyClientStreamReadState {
     #[cfg(feature = "aead-cipher-2022")]
     CheckRequestNonce,
@@ -45,7 +43,6 @@ enum ProxyClientStreamReadState {
 }
 
 /// A stream for sending / receiving data stream from remote server via shadowsocks' proxy server
-#[derive(Debug)]
 #[pin_project]
 pub struct ProxyClientStream<S> {
     #[pin]
@@ -128,7 +125,7 @@ where
                         return Err(io::Error::new(
                             ErrorKind::TimedOut,
                             format!("connect {} timeout", svr_cfg.addr()),
-                        ));
+                        ))
                     }
                 }
             }
@@ -303,7 +300,7 @@ where
 
         loop {
             match this.writer_state {
-                &mut ProxyClientStreamWriteState::Connect(ref addr) => {
+                ProxyClientStreamWriteState::Connect(ref addr) => {
                     let buffer = make_first_packet_buffer(this.stream.method(), addr, buf);
 
                     // Save the concatenated buffer before it is written successfully.
@@ -313,7 +310,7 @@ where
                     // before IO completion.
                     *(this.writer_state) = ProxyClientStreamWriteState::Connecting(buffer);
                 }
-                &mut ProxyClientStreamWriteState::Connecting(ref buffer) => {
+                ProxyClientStreamWriteState::Connecting(ref buffer) => {
                     let n = ready!(this.stream.poll_write_encrypted(cx, buffer))?;
 
                     // In general, poll_write_encrypted should perform like write_all.
