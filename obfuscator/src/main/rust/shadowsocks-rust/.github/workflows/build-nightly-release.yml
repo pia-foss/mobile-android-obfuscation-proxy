@@ -8,79 +8,38 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-nightly-cross:
+  build-cross:
     runs-on: ubuntu-latest
     env:
       RUST_BACKTRACE: full
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - target: x86_64-unknown-linux-gnu
-            toolchain: stable
-          - target: x86_64-unknown-linux-musl
-            toolchain: stable
-          - target: aarch64-unknown-linux-gnu
-            toolchain: stable
-          - target: aarch64-unknown-linux-musl
-            toolchain: stable
-          - target: mips-unknown-linux-gnu
-            toolchain: nightly
-          - target: mipsel-unknown-linux-gnu
-            toolchain: nightly
-          - target: mips64el-unknown-linux-gnuabi64
-            toolchain: nightly
-          - target: x86_64-unknown-freebsd
-            toolchain: stable
-          - target: x86_64-unknown-netbsd
-            toolchain: stable
-          - target: loongarch64-unknown-linux-gnu
-            toolchain: stable
-          - target: loongarch64-unknown-linux-musl
-            toolchain: stable
-          - target: powerpc-unknown-linux-gnu
-            toolchain: stable
-          - target: powerpc64-unknown-linux-gnu
-            toolchain: stable
-          - target: powerpc64le-unknown-linux-gnu
-            toolchain: stable
-          - target: riscv64gc-unknown-linux-gnu
-            toolchain: stable
-          - target: riscv64gc-unknown-linux-musl
-            toolchain: stable
-          - target: aarch64-linux-android
-            toolchain: stable
-          - target: x86_64-linux-android
-            toolchain: stable
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
 
     steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-
-      - name: Install LLVM and Clang
-        run: sudo apt update && sudo apt install -y clang
-
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
       - name: Install Rust
         run: |
           rustup set profile minimal
-          rustup toolchain install ${{ matrix.platform.toolchain }}
-          rustup default ${{ matrix.platform.toolchain }}
-          rustup override set ${{ matrix.platform.toolchain }}
+          rustup toolchain install stable
+          rustup default stable
+          rustup override set stable
+          rustup target add --toolchain stable ${{ matrix.target }}
 
       - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: cargo install cross
 
-      - name: Build ${{ matrix.platform.target }}
+      - name: Build ${{ matrix.target }}
         timeout-minutes: 120
         run: |
-          compile_target=${{ matrix.platform.target }}
+          compile_target=${{ matrix.target }}
 
-          compile_features="-f full"
-
-          if [[ "$compile_target" == *"-windows-"* ]]; then
-            compile_features="$compile_features -f winservice"
+          if [[ "$compile_target" == *"-linux-"* || "$compile_target" == *"-apple-"* ]]; then
+            compile_features="-f local-redir -f local-tun"
           fi
 
           if [[ "$compile_target" == "mips-"* || "$compile_target" == "mipsel-"* || "$compile_target" == "mips64-"* || "$compile_target" == "mips64el-"* ]]; then
@@ -88,24 +47,21 @@ jobs:
             if [[ "$?" == "0" ]]; then
               compile_compress="-u"
             fi
-
-            compile_nightly="-n"
-            #compile_cargo_flags="-Z build-std=std,panic_abort,proc_macro"
           fi
 
           cd build
-          ./build-release -t ${{ matrix.platform.target }} $compile_features $compile_compress $compile_nightly $compile_cargo_flags
+          ./build-release -t ${{ matrix.target }} $compile_features $compile_compress
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.platform.target }}
+          name: ${{ matrix.target }}
           path: build/release/*
 
-  build-nightly-unix:
+  build-unix:
     runs-on: ${{ matrix.os }}
     env:
-      BUILD_EXTRA_FEATURES: "full"
+      BUILD_EXTRA_FEATURES: "local-redir local-tun"
       RUST_BACKTRACE: full
     strategy:
       fail-fast: false
@@ -115,7 +71,7 @@ jobs:
           - x86_64-apple-darwin
           - aarch64-apple-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
       - name: Install GNU tar
         if: runner.os == 'macOS'
@@ -138,19 +94,18 @@ jobs:
           ./build/build-host-release -t ${{ matrix.target }}
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.target }}
           path: build/release/*
 
-  build-nightly-windows:
+  build-windows:
     runs-on: windows-latest
     env:
       RUSTFLAGS: "-C target-feature=+crt-static"
       RUST_BACKTRACE: full
     steps:
-      - uses: actions/checkout@v4
-      - uses: ilammy/setup-nasm@v1
+      - uses: actions/checkout@v3
 
       - name: Install Rust
         run: |
@@ -161,10 +116,10 @@ jobs:
 
       - name: Build release
         run: |
-          pwsh ./build/build-host-release.ps1 "full winservice"
+          pwsh ./build/build-host-release.ps1
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: windows-native
           path: build/release/*

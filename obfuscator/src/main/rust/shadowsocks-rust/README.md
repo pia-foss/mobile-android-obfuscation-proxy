@@ -2,19 +2,17 @@
 
 [![License](https://img.shields.io/github/license/zonyitoo/shadowsocks-rust.svg)](https://github.com/zonyitoo/shadowsocks-rust)
 [![Build & Test](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-and-test.yml)
-[![Build MSRV](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-msrv.yml/badge.svg)](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-msrv.yml)
-[![Build Releases](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-release.yml/badge.svg?event=push)](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-release.yml)
+[![Build Releases](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-release.yml/badge.svg)](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-release.yml)
 [![Build Nightly Releases](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-nightly-release.yml/badge.svg)](https://github.com/shadowsocks/shadowsocks-rust/actions/workflows/build-nightly-release.yml)
-[![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20shadowsocks%20Guru-006BFF)](https://gurubase.io/g/shadowsocks)
 
 [![crates.io](https://img.shields.io/crates/v/shadowsocks-rust.svg)](https://crates.io/crates/shadowsocks-rust)
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
-[![shadowsocks-rust](https://img.shields.io/archlinux/v/extra/x86_64/shadowsocks-rust)](https://archlinux.org/packages/extra/x86_64/shadowsocks-rust/)
-[![aur shadowsocks-rust-git](https://img.shields.io/aur/version/shadowsocks-rust-git)](https://aur.archlinux.org/packages/shadowsocks-rust-git)
+[![archlinuxcn shadowsocks-rust-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-git&query=%24.version&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fv2%2Fpackages%2Fshadowsocks-rust-git)](https://build.archlinuxcn.org/)
+[![archlinuxcn shadowsocks-rust-opt-git](https://img.shields.io/badge/dynamic/json?label=archlinuxcn-opt-git&query=%24.version&url=https%3A%2F%2Fbuild.archlinuxcn.org%2Fapi%2Fv2%2Fpackages%2Fshadowsocks-rust-opt-git)](https://build.archlinuxcn.org/)
+[![aur shadowsocks-rust](https://img.shields.io/aur/version/shadowsocks-rust)](https://aur.archlinux.org/packages/shadowsocks-rust)
 [![NixOS](https://img.shields.io/badge/NixOS-shadowsocks--rust-blue?logo=nixos)](https://github.com/NixOS/nixpkgs/tree/master/pkgs/tools/networking/shadowsocks-rust)
-[![snap shadowsocks-rust](https://snapcraft.io/shadowsocks-rust/badge.svg)](https://snapcraft.io/shadowsocks-rust)
-[![homebrew shadowsocks-rust](https://img.shields.io/homebrew/v/shadowsocks-rust)](https://formulae.brew.sh/formula/shadowsocks-rust#default)
-[![MacPorts shadowsocks-rust](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fports.macports.org%2Fapi%2Fv1%2Fports%2Fshadowsocks-rust%2F&query=%24.version&label=macports)](https://ports.macports.org/port/shadowsocks-rust/)
+
+[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/shadowsocks-rust)
 
 This is a port of [shadowsocks](https://github.com/shadowsocks/shadowsocks).
 
@@ -52,11 +50,7 @@ Related Projects:
 
 - `local-dns` - Allow using dns protocol for `sslocal`, serves as a DNS server proxying queries to local or remote DNS servers by ACL rules
 
-- `local-fake-dns` - FakeDNS, allocating an IP address for each individual Query from a specific IP pool
-
 - `local-tun` - [TUN](https://en.wikipedia.org/wiki/TUN/TAP) interface support for `sslocal`
-
-- `local-online-config` - [SIP008](https://shadowsocks.org/doc/sip008.html) Online Configuration Delivery
 
 - `stream-cipher` - Enable deprecated stream ciphers. WARN: stream ciphers are UNSAFE!
 
@@ -125,15 +119,13 @@ systemctl restart snap.shadowsocks-rust.sslocal-daemon.service
 systemctl status snap.shadowsocks-rust.sslocal-daemon.service
 ```
 
-Default configuration file path probably is `/var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/config.json`.
-
 ### **Download release**
 
 Download static-linked build [here](https://github.com/shadowsocks/shadowsocks-rust/releases).
 
-- Most of them are built with [cross](https://github.com/cross-rs/cross). Build environment details could be found in its README, such as glibc's version.
-- `x86_64-apple-darwin`, `aarch64-apple-darwin` are built in github's `macos-latest` image. Information could be found in [here](https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners).
-- `x86_64-pc-windows-msvc` is built in github's `windows-latest` image. Information could be found in [here](https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners).
+- `build-windows`: Build for `x86_64-pc-windows-msvc`
+- `build-linux`: Build for `x86_64-unknown-linux-gnu`, Debian 9 (Stretch), GLIBC 2.18
+- `build-docker`: Build for `x86_64-unknown-linux-musl`, `x86_64-pc-windows-gnu`, ... (statically linked)
 
 ### **Docker**
 
@@ -272,18 +264,12 @@ Requirements:
 ./build/build-release
 ```
 
-Then `sslocal`, `ssserver`, `ssmanager`, `ssservice` and `ssurl` will be packaged in
+Then `sslocal`, `ssserver`, `ssmanager` and `ssurl` will be packaged in
 
 - `./build/shadowsocks-${VERSION}-stable.x86_64-unknown-linux-musl.tar.xz`
 - `./build/shadowsocks-${VERSION}-stable.x86_64-pc-windows-gnu.zip`
 
 Read `Cargo.toml` for more details.
-
-For Linux with low GLIBC versions, set `CROSS_CONFIG` to CentOS based image:
-
-```bash
-export CROSS_CONFIG=Cross-centos.toml
-```
 
 ## Getting Started
 
@@ -308,9 +294,7 @@ Create a ShadowSocks' configuration file. Example
 }
 ```
 
-Detailed explanation of the configuration file could be found in [shadowsocks' documentation](https://github.com/shadowsocks/shadowsocks/wiki). (Link to original project, not maintained anymore !)
-
-> :warning: For snap installations, configuration file is most probably located in `/var/snap/shadowsocks-rust/common/etc/shadowsocks-rust/config.json` (see <https://github.com/shadowsocks/shadowsocks-rust/issues/621> / <https://github.com/shadowsocks/shadowsocks-rust/issues/1146>)
+Detailed explanation could be found in [shadowsocks' documentation](https://github.com/shadowsocks/shadowsocks/wiki).
 
 In shadowsocks-rust, we also have an extended configuration file format, which is able to define more than one server. You can also disable individual servers.
 
@@ -661,25 +645,6 @@ Example configuration:
             // Linux/Android: tproxy (default)
             // FreeBSD/OpenBSD: pf (default)
             "udp_redir": "tproxy"
-        },
-        {
-            // FakeDNS local server (feature = "local-fake-dns")
-            // FakeDNS is a DNS server that allocates an IPv4 / IPv6 address in a specific pool for each queries.
-            // Subsequence requests from the other local interfaces that the target addresses includes those allocated IP addresses,
-            // will be substituted back to their original domain name addresses.
-            // This feature is useful mostly for transparent proxy, which will allow the proxied domain names to be resolved remotely.
-            "protocol": "fake-dns",
-            // Listen address
-            "local_address": "127.0.0.1",
-            "local_port": 10053,
-            // IPv4 address pool (for A records)
-            "fake_dns_ipv4_network": "10.255.0.0/16",
-            // IPv6 address pool (for AAAA records)
-            "fake_dns_ipv6_network": "fdf2:e786:ab40:9d2f::/64",
-            // Persistent storage for all allocated DNS records
-            "fake_dns_database_path": "/var/shadowsocks/fakedns.db",
-            // OPTIONAL: Record expire duration in seconds, 10s by default
-            "fake_dns_record_expire_duration": 10
         }
     ],
 
@@ -761,23 +726,6 @@ Example configuration:
             // - uPSK is the user's PSK ("password")
             // Example:
             // "password": "3SYJ/f8nmVuzKvKglykRQDSgg10e/ADilkdRWrrY9HU=:4w0GKJ9U3Ox7CIXGU4A3LDQAqP6qrp/tUi/ilpOR9p4="
-        },
-        {
-            "...": "Any other fields",
-
-            // Some optional fields for this specific server
-
-            // Outbound socket options
-            // Linux Only (SO_MARK)
-            "outbound_fwmark": 255,
-            // FreeBSD only (SO_USER_COOKIE)
-            "outbound_user_cookie": 255,
-            // `SO_BINDTODEVICE` (Linux), `IP_BOUND_IF` (BSD), `IP_UNICAST_IF` (Windows) socket option for outbound sockets
-            "outbound_bind_interface": "eth1",
-            // Outbound socket bind() to this IP (choose a specific interface)
-            "outbound_bind_addr": "11.22.33.44",
-            // Outbound UDP socket allows IP fragmentation (default false)
-            "outbound_udp_allow_fragmentation": false,
         }
     ],
 
@@ -840,8 +788,6 @@ Example configuration:
     "outbound_bind_interface": "eth1",
     // Outbound socket bind() to this IP (choose a specific interface)
     "outbound_bind_addr": "11.22.33.44",
-    // Outbound UDP socket allows IP fragmentation (default false)
-    "outbound_udp_allow_fragmentation": false,
 
     // Balancer customization
     "balancer": {
@@ -853,19 +799,6 @@ Example configuration:
         // Interval seconds between each check for the best server
         // Optional. Specify to enable shorter checking interval for the best server only.
         "check_best_interval": 5
-    },
-
-    // SIP008 Online Configuration Delivery
-    // https://shadowsocks.org/doc/sip008.html
-    "online_config": {
-        "config_url": "https://path-to-online-sip008-configuration",
-        // Optional. Seconds between each update to config_url. Default to 3600s
-        "update_interval": 3600,
-        // Optional. Whitelist of plugins (RECOMMENDED for all users)
-        // SECURITY: To avoid executing untrusted commands loaded from config_url
-        "allowed_plugins": [
-            "v2ray-plugin"
-        ]
     },
 
     // Service configurations

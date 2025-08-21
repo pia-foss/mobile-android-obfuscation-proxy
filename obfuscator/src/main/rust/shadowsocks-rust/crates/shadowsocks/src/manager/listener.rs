@@ -13,7 +13,6 @@ use super::{
 };
 
 /// Manager server Listener
-#[derive(Debug)]
 pub struct ManagerListener {
     socket: ManagerDatagram,
 }

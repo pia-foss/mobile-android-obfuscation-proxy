@@ -9,7 +9,15 @@ use std::{
 use log::trace;
 use pin_project::pin_project;
 use shadowsocks::relay::socks5::{
-    self, Address, Command, Error, HandshakeRequest, HandshakeResponse, Reply, TcpRequestHeader, TcpResponseHeader,
+    self,
+    Address,
+    Command,
+    Error,
+    HandshakeRequest,
+    HandshakeResponse,
+    Reply,
+    TcpRequestHeader,
+    TcpResponseHeader,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},

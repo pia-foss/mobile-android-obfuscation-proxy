@@ -19,7 +19,7 @@ use log::trace;
 
 use crate::{
     context::Context,
-    crypto::{CipherKind, v1::Cipher},
+    crypto::{v1::Cipher, CipherKind},
     relay::socks5::{Address, Error as Socks5Error},
 };
 

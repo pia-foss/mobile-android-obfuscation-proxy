@@ -3,24 +3,15 @@ adopt-info: shadowsocks-rust
 summary: Rust port of Shadowsocks
 description: |
   Shadowsocks Client & Server, written in Rust.
-base: core22
+base: core18
 grade: stable
 confinement: strict
-architectures:
-  - build-on: amd64
-  - build-on: arm64
-  - build-on: armhf
-  - build-on: ppc64el
-  - build-on: s390x
-  - build-on: riscv64
-license: MIT
-source-code: https://github.com/shadowsocks/shadowsocks-rust
+architectures: [amd64, arm64, armhf, i386, ppc64el]
 
 apps:
   sslocal:
     command: bin/sslocal
     plugs: [network, network-bind, network-control, home]
-    aliases: [sslocal]
 
   sslocal-daemon:
     command: bin/sslocal
@@ -31,7 +22,6 @@ apps:
   ssserver:
     command: bin/ssserver
     plugs: [network, network-bind, home]
-    aliases: [ssserver]
 
   ssserver-daemon:
     command: bin/ssserver
@@ -41,12 +31,10 @@ apps:
 
   ssurl:
     command: bin/ssurl
-    aliases: [ssurl]
 
   ssmanager:
     command: bin/ssmanager
-    plugs: [network, network-bind, home]
-    aliases: [ssmanager]
+    plugs: [network, home]
 
 passthrough:
   layout:
@@ -58,13 +46,7 @@ parts:
     plugin: rust
     source: https://github.com/shadowsocks/shadowsocks-rust.git
     rust-channel: stable
-    rust-features: [full]
+    rust-features: [local-tun, local-redir]
     override-pull: |
       snapcraftctl pull
       snapcraftctl set-version `git describe --tags --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`
-    build-packages:
-      - cmake
-      - bindgen
-      - llvm-dev
-      - libclang-dev
-      - clang

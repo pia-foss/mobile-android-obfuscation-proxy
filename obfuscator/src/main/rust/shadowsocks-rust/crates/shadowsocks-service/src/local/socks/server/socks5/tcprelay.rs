@@ -9,12 +9,21 @@ use std::{
 
 use log::{debug, error, trace, warn};
 use shadowsocks::{
-    ServerAddr,
     config::Mode,
     relay::socks5::{
-        self, Address, Command, Error as Socks5Error, HandshakeRequest, HandshakeResponse, PasswdAuthRequest,
-        PasswdAuthResponse, Reply, TcpRequestHeader, TcpResponseHeader,
+        self,
+        Address,
+        Command,
+        Error as Socks5Error,
+        HandshakeRequest,
+        HandshakeResponse,
+        PasswdAuthRequest,
+        PasswdAuthResponse,
+        Reply,
+        TcpRequestHeader,
+        TcpResponseHeader,
     },
+    ServerAddr,
 };
 use tokio::net::TcpStream;
 
@@ -31,7 +40,7 @@ use crate::{
 
 pub struct Socks5TcpHandler {
     context: Arc<ServiceContext>,
-    udp_associate_addr: Arc<ServerAddr>,
+    udp_bind_addr: Arc<ServerAddr>,
     balancer: PingBalancer,
     mode: Mode,
     auth: Arc<Socks5AuthConfig>,
@@ -40,14 +49,14 @@ pub struct Socks5TcpHandler {
 impl Socks5TcpHandler {
     pub fn new(
         context: Arc<ServiceContext>,
-        udp_associate_addr: Arc<ServerAddr>,
+        udp_bind_addr: Arc<ServerAddr>,
         balancer: PingBalancer,
         mode: Mode,
         auth: Arc<Socks5AuthConfig>,
     ) -> Socks5TcpHandler {
         Socks5TcpHandler {
             context,
-            udp_associate_addr,
+            udp_bind_addr,
             balancer,
             mode,
             auth,
@@ -124,7 +133,7 @@ impl Socks5TcpHandler {
 
                 return Err(Error::new(
                     ErrorKind::Other,
-                    "Username/Password Authentication Initial request uname contains invalid characters",
+                    "Username/Password Authentication Initial request uname contains invaid characters",
                 ));
             }
         };
@@ -137,7 +146,7 @@ impl Socks5TcpHandler {
 
                 return Err(Error::new(
                     ErrorKind::Other,
-                    "Username/Password Authentication Initial request passwd contains invalid characters",
+                    "Username/Password Authentication Initial request passwd contains invaid characters",
                 ));
             }
         };
@@ -145,7 +154,8 @@ impl Socks5TcpHandler {
         if self.auth.passwd.check_user(user_name, password) {
             trace!(
                 "socks5 authenticated with Username/Password method, user: {}, password: {}",
-                user_name, password
+                user_name,
+                password
             );
 
             let rsp = PasswdAuthResponse::new(0);
@@ -244,13 +254,7 @@ impl Socks5TcpHandler {
         } else {
             let server = self.balancer.best_tcp_server();
 
-            let r = AutoProxyClientStream::connect_with_opts(
-                self.context,
-                &server,
-                &target_addr,
-                server.connect_opts_ref(),
-            )
-            .await;
+            let r = AutoProxyClientStream::connect(self.context.clone(), &server, &target_addr).await;
             server_opt = Some(server);
 
             r
@@ -303,7 +307,7 @@ impl Socks5TcpHandler {
 
         // shadowsocks accepts both TCP and UDP from the same address
 
-        let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, self.udp_associate_addr.as_ref().into());
+        let rh = TcpResponseHeader::new(socks5::Reply::Succeeded, self.udp_bind_addr.as_ref().into());
         rh.write_to(&mut stream).await?;
 
         // Hold connection until EOF.

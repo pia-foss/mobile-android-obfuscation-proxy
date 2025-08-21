@@ -1,16 +1,14 @@
 use std::{
     ffi::OsString,
     future::Future,
+    process::ExitCode,
     sync::atomic::{AtomicU32, Ordering},
     time::Duration,
 };
 
 use clap::Command;
 use log::{error, info};
-use shadowsocks_rust::{
-    error::ShadowsocksResult,
-    service::{local, manager, server},
-};
+use shadowsocks_rust::service::{local, manager, server};
 use tokio::{runtime::Runtime, sync::oneshot};
 use windows_service::{
     define_windows_service,
@@ -55,11 +53,11 @@ fn set_service_status(
 
 fn handle_create_service_result<F>(
     status_handle: ServiceStatusHandle,
-    create_service_result: ShadowsocksResult<(Runtime, F)>,
+    create_service_result: Result<(Runtime, F), ExitCode>,
     stop_receiver: oneshot::Receiver<()>,
 ) -> Result<(), windows_service::Error>
 where
-    F: Future<Output = ShadowsocksResult>,
+    F: Future<Output = ExitCode>,
 {
     match create_service_result {
         Ok((runtime, main_fut)) => {
@@ -103,8 +101,8 @@ where
                 Duration::default(),
             )?;
         }
-        Err(err) => {
-            error!("failed to create service, exit code: {:?}", err.exit_code());
+        Err(exit_code) => {
+            error!("failed to create service, exit code: {:?}", exit_code);
 
             // Report running state
             set_service_status(

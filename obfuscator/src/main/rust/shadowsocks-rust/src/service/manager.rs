@@ -2,7 +2,7 @@
 
 use std::{future::Future, net::IpAddr, path::PathBuf, process::ExitCode, time::Duration};
 
-use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint, builder::PossibleValuesParser};
+use clap::{builder::PossibleValuesParser, Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use futures::future::{self, Either};
 use log::{info, trace};
 use tokio::{
@@ -18,7 +18,7 @@ use shadowsocks_service::{
     run_manager,
     shadowsocks::{
         config::{ManagerAddr, Mode},
-        crypto::{CipherKind, available_ciphers},
+        crypto::{available_ciphers, CipherKind},
         plugin::PluginConfig,
     },
 };
@@ -27,8 +27,8 @@ use shadowsocks_service::{
 use crate::logging;
 use crate::{
     config::{Config as ServiceConfig, RuntimeMode},
-    error::{ShadowsocksError, ShadowsocksResult},
-    monitor, vparser,
+    monitor,
+    vparser,
 };
 
 /// Defines command line options
@@ -93,15 +93,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
                 .num_args(1)
                 .action(ArgAction::Set)
                 .value_hint(ValueHint::CommandName)
-                .help("Default SIP003 (https://shadowsocks.org/doc/sip003.html) plugin"),
-        )
-        .arg(
-            Arg::new("PLUGIN_MODE")
-                .long("plugin-mode")
-                .num_args(1)
-                .action(ArgAction::Set)
-                .requires("PLUGIN")
-                .help("SIP003/SIP003u plugin mode, must be one of `tcp_only` (default), `udp_only` and `tcp_and_udp`"),
+                .help("Default SIP003 (https://shadowsocks.org/guide/sip003.html) plugin"),
         )
         .arg(
             Arg::new("PLUGIN_OPT")
@@ -268,7 +260,7 @@ pub fn define_command_line_options(mut app: Command) -> Command {
 }
 
 /// Create `Runtime` and `main` entry
-pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<Output = ShadowsocksResult> + use<>)> {
+pub fn create(matches: &ArgMatches) -> Result<(Runtime, impl Future<Output = ExitCode>), ExitCode> {
     let (config, runtime) = {
         let config_path_opt = matches.get_one::<PathBuf>("CONFIG").cloned().or_else(|| {
             if !matches.contains_id("SERVER_CONFIG") {
@@ -285,8 +277,13 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         });
 
         let mut service_config = match config_path_opt {
-            Some(ref config_path) => ServiceConfig::load_from_file(config_path)
-                .map_err(|err| ShadowsocksError::LoadConfigFailure(format!("loading config {config_path:?}, {err}")))?,
+            Some(ref config_path) => match ServiceConfig::load_from_file(config_path) {
+                Ok(c) => c,
+                Err(err) => {
+                    eprintln!("loading config {config_path:?}, {err}");
+                    return Err(crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into());
+                }
+            },
             None => ServiceConfig::default(),
         };
         service_config.set_options(matches);
@@ -304,8 +301,13 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         trace!("{:?}", service_config);
 
         let mut config = match config_path_opt {
-            Some(cpath) => Config::load_from_file(&cpath, ConfigType::Manager)
-                .map_err(|err| ShadowsocksError::LoadConfigFailure(format!("loading config {cpath:?}, {err}")))?,
+            Some(cpath) => match Config::load_from_file(&cpath, ConfigType::Manager) {
+                Ok(cfg) => cfg,
+                Err(err) => {
+                    eprintln!("loading config {cpath:?}, {err}");
+                    return Err(crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into());
+                }
+            },
             None => Config::new(ConfigType::Manager),
         };
 
@@ -340,13 +342,10 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         }
 
         if let Some(addr) = matches.get_one::<ManagerAddr>("MANAGER_ADDR").cloned() {
-            match config.manager {
-                Some(ref mut manager_config) => {
-                    manager_config.addr = addr;
-                }
-                _ => {
-                    config.manager = Some(ManagerConfig::new(addr));
-                }
+            if let Some(ref mut manager_config) = config.manager {
+                manager_config.addr = addr;
+            } else {
+                config.manager = Some(ManagerConfig::new(addr));
             }
         }
 
@@ -378,13 +377,7 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
                     plugin: p,
                     plugin_opts: matches.get_one::<String>("PLUGIN_OPT").cloned(),
                     plugin_args: Vec::new(),
-                    plugin_mode: matches
-                        .get_one::<String>("PLUGIN_MODE")
-                        .map(|x| {
-                            x.parse::<Mode>()
-                                .expect("plugin-mode must be one of `tcp_only` (default), `udp_only` and `tcp_and_udp`")
-                        })
-                        .unwrap_or(Mode::TcpOnly),
+                    plugin_mode: Mode::TcpOnly,
                 });
             }
 
@@ -415,8 +408,13 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
         }
 
         if let Some(acl_file) = matches.get_one::<String>("ACL") {
-            let acl = AccessControl::load_from_file(acl_file)
-                .map_err(|err| ShadowsocksError::LoadAclFailure(format!("loading ACL \"{acl_file}\", {err}")))?;
+            let acl = match AccessControl::load_from_file(acl_file) {
+                Ok(acl) => acl,
+                Err(err) => {
+                    eprintln!("loading ACL \"{acl_file}\", {err}");
+                    return Err(crate::EXIT_CODE_LOAD_ACL_FAILURE.into());
+                }
+            };
             config.acl = Some(acl);
         }
 
@@ -459,17 +457,18 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
 
         // DONE reading options
 
-        config.manager.as_ref().ok_or_else(|| {
-            ShadowsocksError::InsufficientParams(
+        if config.manager.is_none() {
+            eprintln!(
                 "missing `manager_address`, consider specifying it by --manager-address command line option, \
                     or \"manager_address\" and \"manager_port\" keys in configuration file"
-                    .to_string(),
-            )
-        })?;
+            );
+            return Err(crate::EXIT_CODE_INSUFFICIENT_PARAMS.into());
+        }
 
-        config
-            .check_integrity()
-            .map_err(|err| ShadowsocksError::LoadConfigFailure(format!("config integrity check failed, {err}")))?;
+        if let Err(err) = config.check_integrity() {
+            eprintln!("config integrity check failed, {err}");
+            return Err(crate::EXIT_CODE_LOAD_CONFIG_FAILURE.into());
+        }
 
         #[cfg(unix)]
         if matches.get_flag("DAEMONIZE") || matches.get_raw("DAEMONIZE_PID_PATH").is_some() {
@@ -479,25 +478,31 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
 
         #[cfg(unix)]
         if let Some(uname) = matches.get_one::<String>("USER") {
-            crate::sys::run_as_user(uname).map_err(|err| {
-                ShadowsocksError::InsufficientParams(format!("failed to change as user, error: {err}"))
-            })?;
+            if let Err(err) = crate::sys::run_as_user(uname) {
+                eprintln!("failed to change as user, error: {err}");
+                return Err(crate::EXIT_CODE_INSUFFICIENT_PARAMS.into());
+            }
         }
 
         info!("shadowsocks manager {} build {}", crate::VERSION, crate::BUILD_TIME);
 
+        let mut worker_count = 1;
         let mut builder = match service_config.runtime.mode {
             RuntimeMode::SingleThread => Builder::new_current_thread(),
             #[cfg(feature = "multi-threaded")]
             RuntimeMode::MultiThread => {
                 let mut builder = Builder::new_multi_thread();
                 if let Some(worker_threads) = service_config.runtime.worker_count {
+                    worker_count = worker_threads;
                     builder.worker_threads(worker_threads);
+                } else {
+                    worker_count = num_cpus::get();
                 }
 
                 builder
             }
         };
+        config.worker_count = worker_count;
 
         let runtime = builder.enable_all().build().expect("create tokio Runtime");
 
@@ -513,13 +518,17 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
 
         match future::select(server, abort_signal).await {
             // Server future resolved without an error. This should never happen.
-            Either::Left((Ok(..), ..)) => Err(ShadowsocksError::ServerExitUnexpectedly(
-                "server exited unexpectedly".to_owned(),
-            )),
+            Either::Left((Ok(..), ..)) => {
+                eprintln!("server exited unexpectedly");
+                crate::EXIT_CODE_SERVER_EXIT_UNEXPECTEDLY.into()
+            }
             // Server future resolved with error, which are listener errors in most cases
-            Either::Left((Err(err), ..)) => Err(ShadowsocksError::ServerAborted(format!("server aborted with {err}"))),
+            Either::Left((Err(err), ..)) => {
+                eprintln!("server aborted with {err}");
+                crate::EXIT_CODE_SERVER_ABORTED.into()
+            }
             // The abort signal future resolved. Means we should just exit.
-            Either::Right(_) => Ok(()),
+            Either::Right(_) => ExitCode::SUCCESS,
         }
     };
 
@@ -529,12 +538,9 @@ pub fn create(matches: &ArgMatches) -> ShadowsocksResult<(Runtime, impl Future<O
 /// Program entrance `main`
 #[inline]
 pub fn main(matches: &ArgMatches) -> ExitCode {
-    match create(matches).and_then(|(runtime, main_fut)| runtime.block_on(main_fut)) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(err) => {
-            eprintln!("{err}");
-            err.exit_code().into()
-        }
+    match create(matches) {
+        Ok((runtime, main_fut)) => runtime.block_on(main_fut),
+        Err(code) => code,
     }
 }
 

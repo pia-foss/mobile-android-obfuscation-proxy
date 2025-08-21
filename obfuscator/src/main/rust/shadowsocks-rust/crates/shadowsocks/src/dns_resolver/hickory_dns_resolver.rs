@@ -7,23 +7,26 @@ use std::{
     ops::Deref,
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
 };
 
+use cfg_if::cfg_if;
 use futures::ready;
 use hickory_resolver::{
-    ResolveError, Resolver,
     config::{LookupIpStrategy, ResolverConfig, ResolverOpts},
-    name_server::GenericConnector,
+    error::ResolveResult,
+    name_server::{GenericConnector, RuntimeProvider},
     proto::{
-        runtime::{RuntimeProvider, TokioHandle, TokioTime, iocompat::AsyncIoTokioAsStd},
-        udp::DnsUdpSocket,
+        iocompat::AsyncIoTokioAsStd,
+        udp::{DnsUdpSocket, QuicLocalAddr},
+        TokioTime,
     },
+    AsyncResolver,
+    TokioHandle,
 };
-use log::{error, trace};
+use log::trace;
 use tokio::{io::ReadBuf, net::UdpSocket};
 
-use crate::net::{ConnectOpts, tcp::TcpStream as ShadowTcpStream, udp::UdpSocket as ShadowUdpSocket};
+use crate::net::{tcp::TcpStream as ShadowTcpStream, udp::UdpSocket as ShadowUdpSocket, ConnectOpts};
 
 /// Shadowsocks hickory-dns Runtime Provider
 #[derive(Clone)]
@@ -60,6 +63,12 @@ impl DnsUdpSocket for ShadowUdpSocket {
     }
 }
 
+impl QuicLocalAddr for ShadowUdpSocket {
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.deref().local_addr()
+    }
+}
+
 impl RuntimeProvider for ShadowDnsRuntimeProvider {
     type Handle = TokioHandle;
     type Tcp = AsyncIoTokioAsStd<ShadowTcpStream>;
@@ -70,31 +79,10 @@ impl RuntimeProvider for ShadowDnsRuntimeProvider {
         self.handle.clone()
     }
 
-    fn connect_tcp(
-        &self,
-        server_addr: SocketAddr,
-        bind_addr: Option<SocketAddr>,
-        wait_for: Option<Duration>,
-    ) -> Pin<Box<dyn Send + Future<Output = io::Result<Self::Tcp>>>> {
-        let mut connect_opts = self.connect_opts.clone();
-
-        if let Some(bind_addr) = bind_addr {
-            connect_opts.bind_local_addr = Some(bind_addr);
-        }
-
-        let wait_for = wait_for.unwrap_or_else(|| Duration::from_secs(5));
-
+    fn connect_tcp(&self, server_addr: SocketAddr) -> Pin<Box<dyn Send + Future<Output = io::Result<Self::Tcp>>>> {
+        let connect_opts = self.connect_opts.clone();
         Box::pin(async move {
-            let tcp = match tokio::time::timeout(
-                wait_for,
-                ShadowTcpStream::connect_with_opts(&server_addr, &connect_opts),
-            )
-            .await
-            {
-                Ok(Ok(s)) => s,
-                Ok(Err(err)) => return Err(err),
-                Err(_) => return Err(io::ErrorKind::TimedOut.into()),
-            };
+            let tcp = ShadowTcpStream::connect_with_opts(&server_addr, &connect_opts).await?;
             Ok(AsyncIoTokioAsStd(tcp))
         })
     }
@@ -118,65 +106,71 @@ pub type ShadowDnsConnectionProvider = GenericConnector<ShadowDnsRuntimeProvider
 /// Shadowsocks DNS resolver
 ///
 /// A customized hickory-dns-resolver
-pub type DnsResolver = Resolver<ShadowDnsConnectionProvider>;
+pub type DnsResolver = AsyncResolver<ShadowDnsConnectionProvider>;
 
 /// Create a `hickory-dns` asynchronous DNS resolver
 pub async fn create_resolver(
     dns: Option<ResolverConfig>,
     opts: Option<ResolverOpts>,
     connect_opts: ConnectOpts,
-) -> Result<DnsResolver, ResolveError> {
+) -> ResolveResult<DnsResolver> {
     // Customized dns resolution
     match dns {
         Some(conf) => {
-            trace!("initializing DNS resolver with config {:?}", conf,);
-
-            let mut builder = DnsResolver::builder_with_config(
-                conf,
-                ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(connect_opts)),
-            );
-            if let Some(opts) = opts {
-                *builder.options_mut() = opts;
-            }
-            let resolver_opts = builder.options_mut();
-
+            let mut resolver_opts = opts.unwrap_or_default();
             // Use Ipv4AndIpv6 strategy. Because Ipv4ThenIpv6 or Ipv6ThenIpv4 will return if the first query returned.
             // Since we want to use Happy Eyeballs to connect to both IPv4 and IPv6 addresses, we need both A and AAAA records.
             resolver_opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
 
-            // Enable EDNS0 for large records
-            resolver_opts.edns0 = true;
-
-            trace!("initializing DNS resolver with opts {:?}", resolver_opts);
-
-            Ok(builder.build())
+            trace!(
+                "initializing DNS resolver with config {:?} opts {:?}",
+                conf,
+                resolver_opts
+            );
+            Ok(DnsResolver::new(
+                conf,
+                resolver_opts,
+                ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(connect_opts)),
+            ))
         }
 
         // To make this independent, if targeting macOS, BSD, Linux, or Windows, we can use the system's configuration
         // Android doesn't have /etc/resolv.conf.
         None => {
-            match DnsResolver::builder(ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(
-                connect_opts,
-            ))) {
-                Ok(mut builder) => {
-                    let opts = builder.options_mut();
+            cfg_if! {
+                if #[cfg(any(all(unix, not(target_os = "android")), windows))] {
+                    use hickory_resolver::system_conf::read_system_conf;
+
+                    // use the system resolver configuration
+                    let (config, mut opts) = match read_system_conf() {
+                        Ok(o) => o,
+                        Err(err) => {
+                            use log::error;
+
+                            error!("failed to initialize DNS resolver with system-config, error: {}", err);
+
+                            // From::from is required because on error type is different on Windows
+                            #[allow(clippy::useless_conversion)]
+                            return Err(From::from(err));
+                        }
+                    };
+
                     // NOTE: timeout will be set by config (for example, /etc/resolv.conf on UNIX-like system)
                     //
                     // Only ip_strategy should be changed. Why Ipv4AndIpv6? See comments above.
                     opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
 
-                    // Enable EDNS0 for large records
-                    opts.edns0 = true;
+                    trace!(
+                        "initializing DNS resolver with system-config {:?} opts {:?}",
+                        config,
+                        opts
+                    );
 
-                    trace!("initializing DNS resolver with system-config opts {:?}", opts);
+                    Ok(DnsResolver::new(config, opts, ShadowDnsConnectionProvider::new(ShadowDnsRuntimeProvider::new(connect_opts))))
+                } else {
+                    use hickory_resolver::error::ResolveError;
 
-                    Ok(builder.build())
-                }
-                Err(err) => {
-                    error!("initialize DNS resolver with system-config failed, error: {}", err);
-                    Err(ResolveError::from(
-                        "current platform doesn't support hickory-dns resolver with system configured".to_owned(),
-                    ))
+                    Err(ResolveError::from("current platform doesn't support hickory-dns resolver with system configured".to_owned()))
                 }
             }
         }

@@ -6,7 +6,7 @@
         <false/>
 
         <key>Label</key>
-        <string>org.shadowsocks.shadowsocks-rust</string>
+        <string>com.zonyitoo.shadowsocks-rust</string>
 
         <key>ProgramArguments</key>
         <array>

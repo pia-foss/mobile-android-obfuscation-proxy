@@ -6,7 +6,7 @@ use std::{fmt, io, net::SocketAddr};
 
 use tokio::net::UdpSocket;
 #[cfg(unix)]
-use tokio::net::{UnixDatagram, unix::SocketAddr as UnixSocketAddr};
+use tokio::net::{unix::SocketAddr as UnixSocketAddr, UnixDatagram};
 
 use crate::{
     config::ManagerAddr,
@@ -46,7 +46,6 @@ impl fmt::Display for ManagerSocketAddr {
 /// Datagram socket for manager
 ///
 /// For *nix system, this is a wrapper for both UDP socket and Unix socket
-#[derive(Debug)]
 pub enum ManagerDatagram {
     UdpDatagram(UdpSocket),
     #[cfg(unix)]

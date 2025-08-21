@@ -2,8 +2,8 @@
 
 use std::{io, sync::Arc, time::Duration};
 
-use futures::{FutureExt, future};
-use shadowsocks::{ServerAddr, config::Mode};
+use futures::{future, FutureExt};
+use shadowsocks::{config::Mode, ServerAddr};
 
 use crate::local::{context::ServiceContext, loadbalancing::PingBalancer};
 
@@ -25,7 +25,6 @@ pub struct SocksBuilder {
     udp_expiry_duration: Option<Duration>,
     udp_capacity: Option<usize>,
     udp_bind_addr: Option<ServerAddr>,
-    udp_associate_addr: Option<ServerAddr>,
     socks5_auth: Socks5AuthConfig,
     client_config: ServerAddr,
     balancer: PingBalancer,
@@ -54,7 +53,6 @@ impl SocksBuilder {
             udp_expiry_duration: None,
             udp_capacity: None,
             udp_bind_addr: None,
-            udp_associate_addr: None,
             socks5_auth: Socks5AuthConfig::default(),
             client_config,
             balancer,
@@ -88,10 +86,6 @@ impl SocksBuilder {
         self.udp_bind_addr = Some(a);
     }
 
-    pub fn set_udp_associate_addr(&mut self, a: ServerAddr) {
-        self.udp_associate_addr = Some(a);
-    }
-
     /// Set SOCKS5 Username/Password Authentication configuration
     pub fn set_socks5_auth(&mut self, p: Socks5AuthConfig) {
         self.socks5_auth = p;
@@ -110,20 +104,14 @@ impl SocksBuilder {
     }
 
     pub async fn build(self) -> io::Result<Socks> {
-        let udp_bind_addr = self.udp_bind_addr.clone().unwrap_or_else(|| self.client_config.clone());
-        let udp_associate_addr: ServerAddr = self
-            .udp_associate_addr
-            .as_ref()
-            .or(self.udp_bind_addr.as_ref())
-            .unwrap_or(&self.client_config)
-            .clone();
+        let udp_bind_addr = self.udp_bind_addr.unwrap_or_else(|| self.client_config.clone());
 
         let mut udp_server = None;
         if self.mode.enable_udp() {
             #[allow(unused_mut)]
             let mut builder = Socks5UdpServerBuilder::new(
                 self.context.clone(),
-                udp_bind_addr,
+                udp_bind_addr.clone(),
                 self.udp_expiry_duration,
                 self.udp_capacity,
                 self.balancer.clone(),
@@ -144,7 +132,7 @@ impl SocksBuilder {
             let mut builder = SocksTcpServerBuilder::new(
                 self.context.clone(),
                 self.client_config,
-                udp_associate_addr,
+                udp_bind_addr,
                 self.balancer.clone(),
                 self.mode,
                 self.socks5_auth,

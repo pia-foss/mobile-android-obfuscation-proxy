@@ -1,7 +1,7 @@
 use std::{
-    io::{self, ErrorKind},
+    io,
     mem,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
     pin::Pin,
     ptr,
@@ -20,9 +20,11 @@ use tokio::{
 use tokio_tfo::TfoStream;
 
 use crate::net::{
-    AcceptOpts, AddrFamily, ConnectOpts,
     sys::{set_common_sockopt_after_connect, set_common_sockopt_for_connect, socket_bind_dual_stack},
     udp::{BatchRecvMessage, BatchSendMessage},
+    AcceptOpts,
+    AddrFamily,
+    ConnectOpts,
 };
 
 /// A `TcpStream` that supports TFO (TCP Fast Open)
@@ -56,7 +58,7 @@ impl TcpStream {
         // This is a workaround for VPNService
         #[cfg(target_os = "android")]
         if !addr.ip().is_loopback() {
-            use std::time::Duration;
+            use std::{io::ErrorKind, time::Duration};
             use tokio::time;
 
             if let Some(ref path) = opts.vpn_protect_path {
@@ -214,18 +216,12 @@ pub fn set_tcp_fastopen<S: AsRawFd>(socket: &S) -> io::Result<()> {
 }
 
 fn create_mptcp_socket(bind_addr: &SocketAddr) -> io::Result<TcpSocket> {
-    // https://www.kernel.org/doc/html/next/networking/mptcp.html
-
     unsafe {
         let family = match bind_addr {
             SocketAddr::V4(..) => libc::AF_INET,
             SocketAddr::V6(..) => libc::AF_INET6,
         };
         let fd = libc::socket(family, libc::SOCK_STREAM, libc::IPPROTO_MPTCP);
-        if fd < 0 {
-            let err = io::Error::last_os_error();
-            return Err(err);
-        }
         let socket = Socket::from_raw_fd(fd);
         socket.set_nonblocking(true)?;
         Ok(TcpSocket::from_raw_fd(socket.into_raw_fd()))
@@ -287,19 +283,8 @@ pub fn set_disable_ip_fragmentation<S: AsRawFd>(af: AddrFamily, socket: &S) -> i
 #[inline]
 pub async fn create_outbound_udp_socket(af: AddrFamily, config: &ConnectOpts) -> io::Result<UdpSocket> {
     let bind_addr = match (af, config.bind_local_addr) {
-        (AddrFamily::Ipv4, Some(SocketAddr::V4(addr))) => addr.into(),
-        (AddrFamily::Ipv4, Some(SocketAddr::V6(addr))) => {
-            // Map IPv6 bind_local_addr to IPv4 if AF is IPv4
-            match addr.ip().to_ipv4_mapped() {
-                Some(addr) => SocketAddr::new(addr.into(), 0),
-                None => return Err(io::Error::new(ErrorKind::InvalidInput, "Invalid IPv6 address")),
-            }
-        }
-        (AddrFamily::Ipv6, Some(SocketAddr::V6(addr))) => addr.into(),
-        (AddrFamily::Ipv6, Some(SocketAddr::V4(addr))) => {
-            // Map IPv4 bind_local_addr to IPv6 if AF is IPv6
-            SocketAddr::new(addr.ip().to_ipv6_mapped().into(), 0)
-        }
+        (AddrFamily::Ipv4, Some(IpAddr::V4(ip))) => SocketAddr::new(ip.into(), 0),
+        (AddrFamily::Ipv6, Some(IpAddr::V6(ip))) => SocketAddr::new(ip.into(), 0),
         (AddrFamily::Ipv4, ..) => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
         (AddrFamily::Ipv6, ..) => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
     };
@@ -322,17 +307,15 @@ pub async fn bind_outbound_udp_socket(bind_addr: &SocketAddr, config: &ConnectOp
         UdpSocket::from_std(socket.into())?
     };
 
-    if !config.udp.allow_fragmentation {
-        if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
-            warn!("failed to disable IP fragmentation, error: {}", err);
-        }
+    if let Err(err) = set_disable_ip_fragmentation(af, &socket) {
+        warn!("failed to disable IP fragmentation, error: {}", err);
     }
 
     // Any traffic except localhost should be protected
     // This is a workaround for VPNService
     #[cfg(target_os = "android")]
     {
-        use std::time::Duration;
+        use std::{io::ErrorKind, time::Duration};
         use tokio::time;
 
         if let Some(ref path) = config.vpn_protect_path {
@@ -397,7 +380,10 @@ fn set_bindtodevice<S: AsRawFd>(socket: &S, iface: &str) -> io::Result<()> {
 
 cfg_if! {
     if #[cfg(target_os = "android")] {
-        use std::path::Path;
+        use std::{
+            io::ErrorKind,
+            path::Path,
+        };
         use tokio::io::AsyncReadExt;
 
         use super::uds::UnixStream;

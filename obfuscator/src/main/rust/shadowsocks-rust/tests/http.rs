@@ -10,7 +10,8 @@ use tokio::{
 
 use shadowsocks_service::{
     config::{Config, ConfigType},
-    run_local, run_server,
+    run_local,
+    run_server,
 };
 
 #[tokio::test]

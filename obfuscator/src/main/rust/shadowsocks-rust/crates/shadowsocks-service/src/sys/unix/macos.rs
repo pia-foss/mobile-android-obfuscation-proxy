@@ -4,7 +4,7 @@ use std::{ffi::CString, io, os::fd::RawFd, ptr};
 
 use log::error;
 
-unsafe extern "C" {
+extern "C" {
     /// https://developer.apple.com/documentation/xpc/1505523-launch_activate_socket
     fn launch_activate_socket(
         name: *const libc::c_char,
@@ -59,7 +59,7 @@ pub fn get_launch_activate_socket(name: &str) -> io::Result<RawFd> {
     } else if cnt > 1 {
         for idx in 0..cnt {
             unsafe {
-                let fd = *(fds.add(idx));
+                let fd = *(fds.offset(idx as isize));
                 let _ = libc::close(fd);
             }
         }

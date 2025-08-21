@@ -11,7 +11,8 @@ use tokio::{
 
 use shadowsocks_service::{
     config::{Config, ConfigType},
-    run_local, run_server,
+    run_local,
+    run_server,
 };
 
 #[tokio::test]
@@ -56,7 +57,7 @@ async fn dns_relay() {
     time::sleep(Duration::from_secs(1)).await;
 
     // Query firefox.com, TransactionID: 0x1234
-    const DNS_QUERY: &[u8] = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07firefox\x03com\x00\x00\x01\x00\x01";
+    static DNS_QUERY: &[u8] = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07firefox\x03com\x00\x00\x01\x00\x01";
 
     // 1. DoT
     {
