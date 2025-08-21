@@ -10,6 +10,7 @@ plugins {
 android {
     namespace = "com.kape.obfuscator"
     ndkVersion = sdkDirectory.resolve("ndk").listFilesOrdered().last().name
+//    ndkVersion = "26.1.10909125"
 
     compileSdk = 34
     defaultConfig {
@@ -22,10 +23,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     buildTypes {
@@ -47,6 +44,8 @@ cargo {
     targets = listOf("arm", "arm64", "x86", "x86_64")
     profile = "release"
     extraCargoBuildArguments = listOf("--bin", libname!!)
+    cargoCommand = "${System.getProperty("user.home")}/.cargo/bin/cargo"
+    rustcCommand = "${System.getProperty("user.home")}/.cargo/bin/rustc"
     features {
         noDefaultBut(
             arrayOf(
@@ -68,6 +67,7 @@ cargo {
             } catch (e: java.io.IOException) {
                 throw GradleException("Please install Python3 in order to compile.")
             }
+            spec.environment("RUST_ANDROID_GRADLE_CC_LINK_ARG", "-Wl,-z,max-page-size=16384,-soname,lib$libname.so")
             spec.environment("RUST_ANDROID_GRADLE_LINKER_WRAPPER_PY", "$projectDir/$module/../linker-wrapper.py")
             spec.environment("RUST_ANDROID_GRADLE_TARGET", "target/${toolchain.target}/$profile/lib$libname.so")
         }
@@ -78,6 +78,10 @@ tasks.whenTaskAdded {
     if (this.name == "javaPreCompileDebug" || this.name == "javaPreCompileRelease") {
         this.dependsOn("cargoBuild")
     }
+}
+
+kotlin {
+    jvmToolchain(17)
 }
 
 dependencies {
