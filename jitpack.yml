@@ -1,0 +1,4 @@
+jdk:
+  - openjdk17
+before_install:
+  - sdkmanager "ndk;26.1.10909125"
