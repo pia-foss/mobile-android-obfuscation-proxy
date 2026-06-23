@@ -1,4 +1,18 @@
 jdk:
   - openjdk17
+
 before_install:
-  - sdkmanager "ndk;26.1.10909125"
+  - curl https://sh.rustup.rs -sSf | sh -s -- -y
+  - source $HOME/.cargo/env
+  - mkdir -p $ANDROID_HOME/cmdline-tools
+  - cd /tmp
+  - wget -q https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
+  - unzip -q commandlinetools-linux-13114758_latest.zip
+  - mv cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+  - yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+  - $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;26.1.10909125"
+
+install:
+  - source $HOME/.cargo/env
+  - rustup target add armv7-linux-androideabi aarch64-linux-android i686-linux-android x86_64-linux-android
+  - ./gradlew :obfuscator:publishToMavenLocal
