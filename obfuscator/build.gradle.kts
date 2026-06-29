@@ -74,8 +74,13 @@ cargo {
 }
 
 tasks.whenTaskAdded {
-    if (this.name == "javaPreCompileDebug" || this.name == "javaPreCompileRelease") {
-        this.dependsOn("cargoBuild")
+    when (this.name) {
+        // Ensure the .so files are built before native libs are merged into the AAR.
+        // mergeJniLibFolders (AGP <8) and mergeNativeLibs (AGP 8+) both trigger packaging;
+        // without an explicit dependency either can race ahead of cargoBuild in parallel builds.
+        "mergeDebugJniLibFolders", "mergeReleaseJniLibFolders",
+        "mergeDebugNativeLibs", "mergeReleaseNativeLibs",
+        "javaPreCompileDebug", "javaPreCompileRelease" -> dependsOn("cargoBuild")
     }
 }
 
